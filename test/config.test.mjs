@@ -160,3 +160,33 @@ test("rejects unknown and malformed global config values", async () => {
   assert.equal(malformed.exitCode, 2);
   assert.match(malformed.stderr, /global.*object/i);
 });
+
+test("loads one config snapshot for global and command options", async () => {
+  const globalOptions = { verbose: option.boolean() };
+  const command = defineCommandWithGlobals(globalOptions, {
+    name: "show",
+    description: "Show",
+    options: { label: option.string() },
+    run({ options, globalOptions, stdout }) { stdout.write(JSON.stringify({ ...globalOptions, ...options })); },
+  });
+  const config = { global: { verbose: true }, commands: { show: { label: "same-snapshot" } } };
+  let configReads = 0;
+  const runtime = { env: {}, get config() { configReads += 1; return config; } };
+
+  const result = await runCli({ name: "tool", version: "1", globalOptions, commands: [command] }, ["show"], runtime);
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout), { verbose: true, label: "same-snapshot" });
+  assert.equal(configReads, 1);
+});
+
+test("ignores inherited environment properties when resolving an env mapping", async () => {
+  const command = defineCommand({
+    name: "show",
+    description: "Show",
+    options: { value: option.string({ env: "toString" }) },
+    run({ options, stdout }) { stdout.write(JSON.stringify(options)); },
+  });
+  const result = await runCli({ name: "tool", version: "1", commands: [command] }, ["show"], { env: {} });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout), {});
+});

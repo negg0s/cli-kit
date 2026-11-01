@@ -1,6 +1,6 @@
 ﻿import { formatCommandHelp, formatGroupHelp, formatHelpJson, formatRootHelp } from "./help.js";
 import { parseArgs } from "./parse.js";
-import { resolveOptionSources } from "./config.js";
+import { loadConfig, resolveOptionSources } from "./config.js";
 import type { RunCliOptions } from "./config.js";
 import type { CliDefinition, CliResult } from "./help.js";
 import type { ArgumentDefinition, CommandDefinition, CommandGroupDefinition, CommandNode, OptionMap } from "./types.js";
@@ -231,8 +231,9 @@ export async function runCli(app: CliDefinition, argv: readonly string[], runtim
   try {
     const definitions = command.options ?? {};
     const allDefinitions = mergeOptionMaps(globalDefinitions, definitions);
-    const globalSources = await resolveOptionSources(globalDefinitions, [], app.configFile, runtime, "global");
-    const localSources = await resolveOptionSources(definitions, commandPath, app.configFile, runtime);
+    const configSnapshot = await loadConfig(app.configFile, runtime);
+    const globalSources = await resolveOptionSources(globalDefinitions, [], app.configFile, runtime, "global", configSnapshot);
+    const localSources = await resolveOptionSources(definitions, commandPath, app.configFile, runtime, "command", configSnapshot);
     const parsed = parseArgs(allDefinitions, [...leading.prefix, ...args], { ...globalSources, ...localSources });
     const globalValues = splitParsedOptions(parsed.values as Record<string, unknown>, globalDefinitions);
     const localValues = splitParsedOptions(parsed.values as Record<string, unknown>, definitions);

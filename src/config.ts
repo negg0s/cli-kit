@@ -29,6 +29,13 @@ async function readConfigFile(path: string, cwd: string): Promise<unknown> {
   }
 }
 
+export async function loadConfig(appConfigFile: string | undefined, runtime: RunCliOptions = {}): Promise<unknown> {
+  const runtimeConfig = runtime.config;
+  if (runtimeConfig !== undefined) return runtimeConfig;
+  if (appConfigFile !== undefined) return readConfigFile(appConfigFile, runtime.cwd ?? process.cwd());
+  return { commands: {} };
+}
+
 function parseEnvironmentValue(definition: OptionDefinition, raw: string, name: string): unknown {
   let value: unknown = raw;
   if (definition.type !== "boolean" && definition.multiple) {
@@ -47,13 +54,10 @@ export async function resolveOptionSources(
   appConfigFile: string | undefined,
   runtime: RunCliOptions = {},
   scope: "global" | "command" = "command",
+  configSnapshot?: unknown,
 ): Promise<Record<string, unknown>> {
-  const cwd = runtime.cwd ?? process.cwd();
   const env = runtime.env ?? process.env;
-  let config: unknown;
-  if (runtime.config !== undefined) config = runtime.config;
-  else if (appConfigFile !== undefined) config = await readConfigFile(appConfigFile, cwd);
-  else config = { commands: {} };
+  const config = configSnapshot === undefined ? await loadConfig(appConfigFile, runtime) : configSnapshot;
 
   if (!isRecord(config)) throw new Error("Invalid JSON config: expected an object");
   for (const key of Object.keys(config)) {
@@ -88,7 +92,7 @@ export async function resolveOptionSources(
 
   for (const [name, definition] of Object.entries(options)) {
     if (!definition.env) continue;
-    const value = env[definition.env];
+    const value = Object.hasOwn(env, definition.env) ? env[definition.env] : undefined;
     if (value !== undefined) sourceValues[name] = parseEnvironmentValue(definition, value, definition.env);
   }
   return sourceValues;
