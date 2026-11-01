@@ -57,7 +57,7 @@ export async function resolveOptionSources(
   configSnapshot?: unknown,
 ): Promise<Record<string, unknown>> {
   const env = runtime.env ?? process.env;
-  const config = configSnapshot === undefined ? await loadConfig(appConfigFile, runtime) : configSnapshot;
+  const config = arguments.length >= 6 ? configSnapshot : await loadConfig(appConfigFile, runtime);
 
   if (!isRecord(config)) throw new Error("Invalid JSON config: expected an object");
   for (const key of Object.keys(config)) {

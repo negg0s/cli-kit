@@ -3,6 +3,7 @@ import test from "node:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand, defineCommandWithGlobals, option, runCli } from "../dist/index.js";
+import { resolveOptionSources } from "../dist/config.js";
 
 async function tempDirectory() {
   const parent = join(process.cwd(), ".tmp");
@@ -171,12 +172,22 @@ test("loads one config snapshot for global and command options", async () => {
   });
   const config = { global: { verbose: true }, commands: { show: { label: "same-snapshot" } } };
   let configReads = 0;
-  const runtime = { env: {}, get config() { configReads += 1; return config; } };
+  const runtime = { env: {}, get config() { configReads += 1; return configReads === 1 ? config : { global: { verbose: false }, commands: { show: { label: "different-snapshot" } } }; } };
 
   const result = await runCli({ name: "tool", version: "1", globalOptions, commands: [command] }, ["show"], runtime);
   assert.equal(result.exitCode, 0);
   assert.deepEqual(JSON.parse(result.stdout), { verbose: true, label: "same-snapshot" });
   assert.equal(configReads, 1);
+});
+
+test("rejects an explicit undefined config snapshot without re-reading runtime config", async () => {
+  let configReads = 0;
+  const runtime = { get config() { configReads += 1; return { commands: {} }; } };
+  await assert.rejects(
+    resolveOptionSources({}, [], undefined, runtime, "command", undefined),
+    /Invalid JSON config: expected an object/,
+  );
+  assert.equal(configReads, 0);
 });
 
 test("ignores inherited environment properties when resolving an env mapping", async () => {
