@@ -127,7 +127,16 @@ function mergeOptionMaps(globalOptions: OptionMap, localOptions: OptionMap): Opt
 
 function validateGlobalOptionCollisions(commands: readonly CommandNode[], globalOptions: OptionMap): void {
   for (const command of commands) {
-    if ("run" in command) mergeOptionMaps(globalOptions, command.options ?? {});
+    if ("run" in command) {
+      const localOptions = command.options ?? {};
+      for (const name of ["help", "json-help"]) {
+        if (Object.hasOwn(localOptions, name)) throw new Error(`Local option --${name} is reserved by the runner`);
+      }
+      if ((Object.values(localOptions) as OptionMap[string][]).some((definition) => definition.alias === "h")) {
+        throw new Error("Local option alias -h is reserved by the runner");
+      }
+      mergeOptionMaps(globalOptions, localOptions);
+    }
     else validateGlobalOptionCollisions(command.commands, globalOptions);
   }
 }

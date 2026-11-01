@@ -281,6 +281,31 @@ test("rejects conflicting global/local option names, aliases, and reserved names
   assert.match(reservedAlias.stderr, /alias -h is reserved/i);
 });
 
+test("rejects leaf runner-reserved options before handling help requests", async () => {
+  for (const [name, optionDefinition] of [
+    ["help", option.boolean()],
+    ["json-help", option.boolean()],
+    ["verbose", option.boolean({ alias: "h" })],
+  ]) {
+    const leaf = defineCommand({ name: "run", description: "Run", options: { [name]: optionDefinition }, run() {} });
+    const app = { name: "tool", version: "1", commands: [leaf] };
+    for (const argv of [["--help"], ["run", "--help"]]) {
+      const result = await runCli(app, argv);
+      assert.equal(result.exitCode, 2);
+      assert.match(result.stderr, /reserved.*(?:--help|--json-help|-h)|(?:--help|--json-help|-h).*reserved/i);
+    }
+  }
+});
+
+test("allows a leaf --version option to be parsed", async () => {
+  const leaf = defineCommand({
+    name: "run", description: "Run", options: { version: option.boolean() },
+    run({ options, stdout }) { stdout.write(String(options.version)); },
+  });
+  const result = await runCli({ name: "tool", version: "1.0", commands: [leaf] }, ["run", "--version"]);
+  assert.deepEqual(result, { exitCode: 0, stdout: "true", stderr: "" });
+});
+
 test("accepts a global option with a no-prefixed name", async () => {
   const globalOptions = { "no-cache": option.boolean({ default: false }) };
   const command = defineCommandWithGlobals(globalOptions, {
