@@ -33,9 +33,33 @@ function writeResult(exitCode: number, stdout = "", stderr = ""): CliResult {
   return { exitCode, stdout, stderr };
 }
 
-function hasFlagBeforeTerminator(args: readonly string[], flag: string): boolean {
+function hasFlagBeforeTerminator(args: readonly string[], flags: readonly string[], definitions: OptionMap): boolean {
   const terminator = args.indexOf("--");
-  return args.slice(0, terminator === -1 ? undefined : terminator).includes(flag);
+  const end = terminator === -1 ? args.length : terminator;
+  for (let index = 0; index < end; index += 1) {
+    const token = args[index]!;
+    if (flags.includes(token)) return true;
+
+    let definition: OptionMap[string] | undefined;
+    let inlineValue = false;
+    if (token.startsWith("--")) {
+      const equalsAt = token.indexOf("=");
+      const name = token.slice(2, equalsAt === -1 ? undefined : equalsAt);
+      definition = definitions[name] ?? (name.startsWith("no-") ? definitions[name.slice(3)] : undefined);
+      inlineValue = equalsAt !== -1;
+    } else if (token.startsWith("-") && token !== "-") {
+      const short = token.slice(1);
+      const equalsAt = short.indexOf("=");
+      const alias = short.slice(0, equalsAt === -1 ? undefined : equalsAt);
+      if (alias.length === 1) {
+        definition = Object.values(definitions).find((candidate) => candidate.alias === alias);
+        inlineValue = equalsAt !== -1;
+      }
+    }
+
+    if (definition && definition.type !== "boolean" && !inlineValue) index += 1;
+  }
+  return false;
 }
 
 const NUMBER_PATTERN = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
@@ -196,10 +220,11 @@ export async function runCli(app: CliDefinition, argv: readonly string[], runtim
   if (!command) return writeResult(0, formatRootHelp(app));
   if (!("run" in command)) return writeResult(2, "", `Expected a command after "${commandPath.join(" ")}". Run ${app.name} ${commandPath.join(" ")} --help.\n`);
 
-  if (hasFlagBeforeTerminator(args, "--help") || hasFlagBeforeTerminator(args, "-h")) {
+  const optionDefinitions = { ...globalDefinitions, ...(command.options ?? {}) };
+  if (hasFlagBeforeTerminator(args, ["--help", "-h"], optionDefinitions)) {
     return writeResult(0, formatCommandHelp(app.name, { ...command, globalOptions: globalDefinitions }, commandPath.join(" ")));
   }
-  if (hasFlagBeforeTerminator(args, "--json-help")) return writeResult(0, formatHelpJson({ ...command, globalOptions: globalDefinitions }));
+  if (hasFlagBeforeTerminator(args, ["--json-help"], optionDefinitions)) return writeResult(0, formatHelpJson({ ...command, globalOptions: globalDefinitions }));
 
   let stdout = "";
   let stderr = "";

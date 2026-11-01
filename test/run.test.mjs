@@ -61,6 +61,28 @@ test("shows root and command help and returns versioned JSON help", async () => 
   });
 });
 
+test("does not treat help tokens consumed as option values as help requests", async () => {
+  const command = defineCommand({
+    name: "show",
+    description: "Show a value",
+    options: { name: option.string() },
+    run() {},
+  });
+  const app = { name: "tool", version: "1", commands: [command] };
+
+  const missingHelpValue = await runCli(app, ["show", "--name", "--help"]);
+  assert.equal(missingHelpValue.exitCode, 2);
+  assert.match(missingHelpValue.stderr, /option --name requires a value/i);
+
+  const missingJsonHelpValue = await runCli(app, ["show", "--name", "--json-help"]);
+  assert.equal(missingJsonHelpValue.exitCode, 2);
+  assert.match(missingJsonHelpValue.stderr, /option --name requires a value/i);
+
+  const helpAfterValue = await runCli(app, ["show", "--name", "Ada", "--help"]);
+  assert.equal(helpAfterValue.exitCode, 0);
+  assert.match(helpAfterValue.stdout, /Usage: tool show/);
+});
+
 test("reports parse errors without throwing and honors handler exit codes", async () => {
   const fail = defineCommand({
     name: "fail",
