@@ -30,7 +30,7 @@ function contextsFor(app: CliDefinition): { contexts: CompletionContext[]; trans
   const globalFlags = optionFlags(globalOptions);
   const contexts: CompletionContext[] = [{
     path: [],
-    candidates: [...app.commands.map((command) => command.name), ...globalFlags, "--help", "--json-help", "--version"],
+    candidates: [...app.commands.map((command) => command.name), ...globalFlags, "--help", "-h", "--json-help", "--version"],
     kind: "root",
   }];
   const transitions: CommandTransition[] = [];
@@ -41,11 +41,11 @@ function contextsFor(app: CliDefinition): { contexts: CompletionContext[]; trans
       transitions.push({ parent: path, child: command.name, path: commandPath, leaf: "run" in command });
       if (!("run" in command)) {
         const children = command.commands as readonly CommandNode[];
-        contexts.push({ path: commandPath, candidates: [...children.map((child) => child.name), "--help", "--json-help"], kind: "group" });
+        contexts.push({ path: commandPath, candidates: [...children.map((child) => child.name), "--help", "-h", "--json-help"], kind: "group" });
         visit(children, commandPath);
       } else {
         const options = optionFlags(command.options ?? {});
-        contexts.push({ path: commandPath, candidates: [...new Set([...options, ...globalFlags, "--help", "--json-help"])], kind: "leaf" });
+        contexts.push({ path: commandPath, candidates: [...new Set([...options, ...globalFlags, "--help", "-h", "--json-help"])], kind: "leaf" });
       }
     }
   };
@@ -111,7 +111,7 @@ export function completionScript(app: CliDefinition, shell: CompletionShell): st
 
   if (shell === "zsh") {
     const commandList = app.commands.map((command) => `'${command.name}:${command.name}'`).join(" ");
-    const rootOptions = [...globalFlags, "--help", "--json-help", "--version"]
+    const rootOptions = [...globalFlags, "--help", "-h", "--json-help", "--version"]
       .map((value) => `'${value}[${value}]'`).join(" ");
     const skipCases = Object.entries(globalOptions).flatMap(([name, definition]) => {
       const spellings = [`--${name}`, ...(definition.alias ? [`-${definition.alias}`] : [])];

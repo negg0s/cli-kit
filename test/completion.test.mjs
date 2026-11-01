@@ -105,9 +105,35 @@ test("offers global flags at the root and in leaf command contexts", () => {
     commands: [command],
   };
   const bash = completionScript(app, "bash");
-  assert.match(bash, /--format --verbose -v --no-verbose --help --json-help/);
-  assert.match(bash, /show --verbose -v --no-verbose --help --json-help --version/);
+  assert.match(bash, /--format --verbose -v --no-verbose --help -h --json-help/);
+  assert.match(bash, /show --verbose -v --no-verbose --help -h --json-help --version/);
   assert.match(bash, /--verbose\|-v\|--no-verbose/);
   assert.match(completionScript(app, "zsh"), /--verbose\|-v\|--no-verbose/);
   assert.match(completionScript(app, "fish"), /case '--verbose' '-v' '--no-verbose'/);
+});
+
+test("offers the short help flag in root, group, and leaf contexts for every shell", () => {
+  const app = {
+    name: "tool",
+    version: "1",
+    commands: [{
+      name: "data",
+      description: "Data",
+      commands: [{ name: "import", description: "Import", options: {}, run() {} }],
+    }],
+  };
+  const scripts = ["bash", "zsh", "fish"].map((shell) => completionScript(app, shell));
+
+  for (const script of scripts) {
+    assert.match(script, /-h/);
+  }
+  assert.match(scripts[0], /''\) words='data --help -h --json-help --version'/);
+  assert.match(scripts[0], /'data'\) words='import --help -h --json-help'/);
+  assert.match(scripts[0], /'data import'\) words='--help -h --json-help'/);
+  assert.match(scripts[1], /root_options=\([^\n]*'-h\[-h\]'/);
+  assert.match(scripts[1], /'data'\) command_options=\([^\n]*'-h\[-h\]'/);
+  assert.match(scripts[1], /'data import'\) command_options=\([^\n]*'-h\[-h\]'/);
+  assert.match(scripts[2], /complete -c tool -f -n '__tool_path_is exact' -s 'h'/);
+  assert.match(scripts[2], /complete -c tool -f -n '__tool_path_is exact data' -s 'h'/);
+  assert.match(scripts[2], /complete -c tool -f -n '__tool_path_is prefix data import' -s 'h'/);
 });
