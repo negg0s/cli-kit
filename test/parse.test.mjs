@@ -60,6 +60,12 @@ test("rejects aliases that collide with another option's one-letter long name in
   assert.doesNotThrow(() => parseArgs({ beta: { type: "string", alias: "b" } }, []));
 });
 
+test("accepts a self-alias in short and long forms", () => {
+  for (const token of ["-b", "--b"]) {
+    assert.deepEqual(parseArgs({ b: { type: "boolean", alias: "b" } }, [token]).values, { b: true });
+  }
+});
+
 test("rejects inline values on negated booleans while plain negation remains false", () => {
   for (const value of ["true", "false"]) {
     assert.throws(

@@ -282,17 +282,48 @@ test("rejects conflicting global/local option names, aliases, and reserved names
 });
 
 test("rejects leaf runner-reserved options before handling help requests", async () => {
-  for (const [name, optionDefinition] of [
-    ["help", option.boolean()],
-    ["json-help", option.boolean()],
-    ["verbose", option.boolean({ alias: "h" })],
+  for (const [name, optionDefinition, error] of [
+    ["help", option.boolean(), "Local option --help is reserved by the runner\n"],
+    ["json-help", option.boolean(), "Local option --json-help is reserved by the runner\n"],
+    ["verbose", option.boolean({ alias: "h" }), "Local option alias -h is reserved by the runner\n"],
   ]) {
     const leaf = defineCommand({ name: "run", description: "Run", options: { [name]: optionDefinition }, run() {} });
-    const app = { name: "tool", version: "1", commands: [leaf] };
-    for (const argv of [["--help"], ["run", "--help"]]) {
+    const sibling = defineCommand({ name: "ok", description: "OK", run() {} });
+    const group = defineCommand({ name: "group", description: "Group", commands: [sibling, leaf] });
+    const app = { name: "tool", version: "1", commands: [group] };
+    for (const argv of [["--help"], ["--json-help"], ["group", "--help"], ["group", "--json-help"], ["group", "ok", "--help"], ["group", "run", "--help"]]) {
       const result = await runCli(app, argv);
       assert.equal(result.exitCode, 2);
-      assert.match(result.stderr, /reserved.*(?:--help|--json-help|-h)|(?:--help|--json-help|-h).*reserved/i);
+      assert.equal(result.stderr, error);
+    }
+  }
+});
+
+test("rejects global and local effective negation collisions before dispatch", async () => {
+  for (const [globalOptions, options] of [
+    [{ cache: option.boolean() }, { "no-cache": option.string() }],
+    [{ "no-cache": option.boolean() }, { cache: option.boolean() }],
+  ]) {
+    const leaf = defineCommand({ name: "run", description: "Run", options, run() { throw new Error("dispatched"); } });
+    const app = { name: "tool", version: "1", globalOptions, commands: [leaf] };
+    for (const argv of [["--no-cache", "run"], ["run", "--no-cache"]]) {
+      const result = await runCli(app, argv);
+      assert.equal(result.exitCode, 2);
+      assert.match(result.stderr, /global.*local.*--no-cache/i);
+    }
+  }
+});
+
+test("resolves implicit short options in leading globals and help scanning", async () => {
+  const globalOptions = { x: option.string() };
+  const leaf = defineCommand({ name: "run", description: "Run", options: { y: option.string() }, run({ globalOptions, options, stdout }) { stdout.write(JSON.stringify({ globalOptions, options })); } });
+  const app = { name: "tool", version: "1", globalOptions, commands: [leaf] };
+  assert.deepEqual(await runCli(app, ["-x", "value", "run", "-y", "other"]), { exitCode: 0, stdout: '{"globalOptions":{"x":"value"},"options":{"y":"other"}}', stderr: "" });
+  for (const flag of ["--help", "--json-help"]) {
+    for (const short of ["-x", "-y"]) {
+      const result = await runCli(app, ["run", short, flag]);
+      assert.equal(result.exitCode, 2);
+      assert.match(result.stderr, /requires a value/);
     }
   }
 });

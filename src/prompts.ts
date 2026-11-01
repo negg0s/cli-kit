@@ -40,12 +40,18 @@ export function createReadlinePromptIO(input: Readable, output: Writable): Promp
   const readline = createInterface({ input, crlfDelay: Infinity, terminal: false });
   let pending: { resolve(value: string | undefined): void; signal?: AbortSignal; onAbort?: () => void } | undefined;
   let closed = false;
+  const lines: string[] = [];
 
   readline.on("line", (line) => {
-    if (!pending) return;
+    if (!pending) {
+      lines.push(line);
+      readline.pause();
+      return;
+    }
     const current = pending;
     pending = undefined;
     if (current.signal && current.onAbort) current.signal.removeEventListener("abort", current.onAbort);
+    readline.pause();
     current.resolve(line);
   });
   readline.on("close", () => {
@@ -59,19 +65,26 @@ export function createReadlinePromptIO(input: Readable, output: Writable): Promp
 
   return {
     ask(question, signal) {
-      if (closed || signal?.aborted) return Promise.resolve(undefined);
+      if (signal?.aborted) return Promise.resolve(undefined);
       if (pending) return Promise.reject(new Error("Only one prompt can be active at a time"));
+      if (lines.length > 0) {
+        output.write(`${question} `);
+        return Promise.resolve(lines.shift()!);
+      }
+      if (closed) return Promise.resolve(undefined);
       return new Promise((resolve) => {
         const current: NonNullable<typeof pending> = { resolve, ...(signal ? { signal } : {}) };
         current.onAbort = () => {
           if (pending !== current) return;
           pending = undefined;
+          readline.pause();
           current.resolve(undefined);
         };
         pending = current;
         signal?.addEventListener("abort", current.onAbort, { once: true });
         output.write(`${question} `);
         if (signal?.aborted) current.onAbort();
+        else readline.resume();
       });
     },
     close() {

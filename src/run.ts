@@ -52,7 +52,7 @@ function hasFlagBeforeTerminator(args: readonly string[], flags: readonly string
       const equalsAt = short.indexOf("=");
       const alias = short.slice(0, equalsAt === -1 ? undefined : equalsAt);
       if (alias.length === 1) {
-        definition = Object.values(definitions).find((candidate) => candidate.alias === alias);
+        definition = Object.values(definitions).find((candidate) => candidate.alias === alias) ?? definitions[alias];
         inlineValue = equalsAt !== -1;
       }
     }
@@ -76,7 +76,7 @@ function optionForToken(token: string, definitions: OptionMap): { name: string; 
     const equalsAt = short.indexOf("=");
     const alias = short.slice(0, equalsAt === -1 ? undefined : equalsAt);
     if (alias.length !== 1) return undefined;
-    const found = Object.entries(definitions).find(([, definition]) => definition.alias === alias);
+    const found = Object.entries(definitions).find(([, definition]) => definition.alias === alias) ?? (Object.hasOwn(definitions, alias) ? [alias, definitions[alias]!] as const : undefined);
     return found ? { name: found[0], definition: found[1], ...(equalsAt === -1 ? {} : { inlineValue: short.slice(equalsAt + 1) }) } : undefined;
   }
   return undefined;
@@ -114,6 +114,12 @@ function mergeOptionMaps(globalOptions: OptionMap, localOptions: OptionMap): Opt
   }
   for (const [name, definition] of Object.entries(globalOptions)) {
     if (Object.hasOwn(localOptions, name)) throw new Error(`Global and local options conflict on --${name}`);
+    if (definition.type === "boolean" && Object.hasOwn(localOptions, `no-${name}`)) {
+      throw new Error(`Global and local options conflict on --no-${name}`);
+    }
+    if (name.startsWith("no-") && localOptions[name.slice(3)]?.type === "boolean") {
+      throw new Error(`Global and local options conflict on --${name}`);
+    }
     if (definition.alias) {
       for (const [localName, localDefinition] of Object.entries(localOptions)) {
         if (localDefinition.alias === definition.alias) {

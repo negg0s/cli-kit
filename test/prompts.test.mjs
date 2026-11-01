@@ -60,3 +60,46 @@ test("readline adapter releases an aborted question without consuming the next a
   assert.equal(await second, "kept");
   io.close();
 });
+
+test("readline adapter retains multiple lines from one chunk including after EOF", async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let written = "";
+  output.on("data", chunk => { written += chunk; });
+  const io = createReadlinePromptIO(input, output);
+  const first = io.ask("First?");
+  input.end("one\ntwo\nthree\n");
+  assert.equal(await first, "one");
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(await io.ask("Second?"), "two");
+  assert.equal(await io.ask("Third?"), "three");
+  assert.equal(await io.ask("EOF?"), undefined);
+  assert.equal(written, "First? Second? Third? ");
+  io.close();
+});
+
+test("readline adapter keeps buffered lines through cancellation and resumes for later input", async () => {
+  const input = new PassThrough();
+  const io = createReadlinePromptIO(input, new PassThrough());
+  const first = io.ask("First?");
+  input.write("one\ntwo\n");
+  assert.equal(await first, "one");
+  const controller = new AbortController();
+  controller.abort();
+  assert.equal(await io.ask("Cancelled?", controller.signal), undefined);
+  assert.equal(await io.ask("Second?"), "two");
+  const third = io.ask("Third?");
+  input.end("three\n");
+  assert.equal(await third, "three");
+  io.close();
+});
+
+test("readline adapter drains already emitted lines after close", async () => {
+  const input = new PassThrough();
+  const io = createReadlinePromptIO(input, new PassThrough());
+  input.write("one\ntwo\n");
+  io.close();
+  assert.equal(await io.ask("First?"), "one");
+  assert.equal(await io.ask("Second?"), "two");
+  assert.equal(await io.ask("Done?"), undefined);
+});
