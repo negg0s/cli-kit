@@ -76,5 +76,6 @@
 ### Task 5: Integrated verification
 
 - [x] Run `npm test`, `npm run typecheck`, `npm run examples:check`, `npm run examples:smoke`, and `npm pack --dry-run`.
-- [ ] Review the aggregate diff and receive a fresh whole-branch review.
-- [ ] Commit and push only to `feat/cli-kit-universal`; confirm `main` is unchanged.
+- [x] Review the aggregate diff and receive a fresh whole-branch review. One Minor completion-context issue was parked in the SDD ledger; no Critical or Important findings remain.
+- [x] Commit final plan bookkeeping on `feat/cli-kit-universal` and confirm `main` is unchanged.
+- [ ] Push the feature branch only after explicit authorization; do not merge `main`.
