@@ -47,3 +47,22 @@ test("rejects duplicate aliases and missing required values", () => {
   assert.throws(() => parseArgs({ one: { type: "string", alias: "x" }, two: { type: "string", alias: "x" } }, []), /duplicate option alias/i);
   assert.throws(() => parseArgs({ name: { type: "string", required: true } }, []), /missing required option --name/i);
 });
+
+test("collects repeated options in order and preserves array defaults", () => {
+  const repeated = parseArgs({ tag: { type: "string", multiple: true, default: ["base"] } }, ["--tag", "red", "--tag=blue"]);
+  assert.deepEqual(repeated.values, { tag: ["red", "blue"] });
+
+  const defaults = parseArgs({ tag: { type: "string", multiple: true, default: ["base"] } }, []);
+  assert.deepEqual(defaults.values, { tag: ["base"] });
+});
+
+test("validates each repeated option value and rejects repeated booleans", () => {
+  assert.throws(
+    () => parseArgs({ port: { type: "number", multiple: true } }, ["--port", "8080", "--port", "bad"]),
+    /port.*finite number/i,
+  );
+  assert.throws(
+    () => parseArgs({ loud: { type: "boolean", multiple: true } }, []),
+    /boolean.*cannot be repeated/i,
+  );
+});

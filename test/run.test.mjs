@@ -40,18 +40,23 @@ test("shows root and command help and returns versioned JSON help", async () => 
   const root = await runCli(app, ["--help"]);
   assert.match(root.stdout, /A greeting app/);
   assert.match(root.stdout, /greet\s+Say hello/);
+  assert.match(root.stdout, /--json-help/);
   assert.equal(root.exitCode, 0);
+  const rootJson = await runCli(app, ["--json-help"]);
+  assert.equal(JSON.parse(rootJson.stdout).schemaVersion, 2);
+  assert.equal(JSON.parse(rootJson.stdout).commands[0].name, "greet");
 
   const commandHelp = await runCli(app, ["greet", "--help"]);
   assert.match(commandHelp.stdout, /Usage: hello greet/);
 
   const json = await runCli(app, ["greet", "--json-help"]);
   assert.deepEqual(JSON.parse(json.stdout), {
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "greet",
     description: "Say hello",
     options: [],
     args: [],
+    commands: [],
   });
 });
 
@@ -90,4 +95,87 @@ test("preserves captured output when a handler throws and respects the option te
   const app = { name: "sample", version: "1.0.0", commands: [command] };
   const result = await runCli(app, ["write", "--", "--help"]);
   assert.deepEqual(result, { exitCode: 2, stdout: "--help", stderr: "handler failed\n" });
+});
+
+test("preserves optional positional slots", async () => {
+  const command = defineCommand({
+    name: "copy",
+    description: "Copy files",
+    args: [
+      { name: "source", required: true },
+      { name: "label" },
+    ],
+    run({ args, stdout }) {
+      stdout.write(`${args[0]}:${args[1] ?? "none"}`);
+    },
+  });
+  const result = await runCli({ name: "files", version: "1.0.0", commands: [command] }, ["copy", "src"]);
+  assert.deepEqual(result, { exitCode: 0, stdout: "src:none", stderr: "" });
+});
+
+test("collects a required variadic positional argument", async () => {
+  const command = defineCommand({
+    name: "copy",
+    description: "Copy files",
+    args: [{ name: "source", required: true }, { name: "files", required: true, variadic: true }],
+    run({ args, stdout }) { stdout.write(`${args[0]}:${args[1].join(",")}`); },
+  });
+  const result = await runCli({ name: "files", version: "1.0.0", commands: [command] }, ["copy", "src", "first.txt", "second.txt"]);
+  assert.deepEqual(result, { exitCode: 0, stdout: "src:first.txt,second.txt", stderr: "" });
+});
+
+test("rejects invalid positional definitions and missing variadic values", async () => {
+  const optionalBeforeRequired = defineCommand({
+    name: "bad-args",
+    description: "Invalid arguments",
+    args: [{ name: "optional" }, { name: "required", required: true }],
+    run() {},
+  });
+  const invalidDefinition = await runCli({ name: "tool", version: "1", commands: [optionalBeforeRequired] }, ["bad-args", "a", "b"]);
+  assert.equal(invalidDefinition.exitCode, 2);
+  assert.match(invalidDefinition.stderr, /optional.*before required/i);
+
+  const variadic = defineCommand({
+    name: "many",
+    description: "Needs files",
+    args: [{ name: "files", required: true, variadic: true }],
+    run() {},
+  });
+  const missing = await runCli({ name: "tool", version: "1", commands: [variadic] }, ["many"]);
+  assert.equal(missing.exitCode, 2);
+  assert.match(missing.stderr, /missing required argument <files>/i);
+});
+
+test("dispatches nested commands and shows help at root, group, and leaf levels", async () => {
+  const leaf = defineCommand({ name: "import", description: "Import records", run({ stdout }) { stdout.write("imported"); } });
+  const group = defineCommand({ name: "data", description: "Data tools", commands: [leaf] });
+  const app = { name: "tool", version: "1.0.0", commands: [group] };
+
+  assert.deepEqual(await runCli(app, ["data", "import"]), { exitCode: 0, stdout: "imported", stderr: "" });
+  assert.match((await runCli(app, ["--help"])).stdout, /data\s+Data tools/);
+  assert.match((await runCli(app, ["data"])).stdout, /Usage: tool data/);
+  assert.match((await runCli(app, ["data", "--help"])).stdout, /import\s+Import records/);
+  assert.match((await runCli(app, ["data", "import", "--help"])).stdout, /Usage: tool data import/);
+  assert.deepEqual(JSON.parse((await runCli(app, ["data", "--json-help"])).stdout), {
+    schemaVersion: 2,
+    name: "data",
+    description: "Data tools",
+    options: [],
+    args: [],
+    commands: [{ name: "import", description: "Import records", options: [], args: [], commands: [] }],
+  });
+});
+
+test("reports unknown nested command paths with the nearest help hint", async () => {
+  const group = defineCommand({ name: "data", description: "Data tools", commands: [defineCommand({ name: "import", description: "Import", run() {} })] });
+  const result = await runCli({ name: "tool", version: "1", commands: [group] }, ["data", "missing"]);
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /Unknown command "data missing".*tool data --help/);
+});
+
+test("rejects unknown root flags instead of reporting successful help", async () => {
+  const app = { name: "tool", version: "1", commands: [] };
+  const result = await runCli(app, ["--bogus"]);
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /unknown option "--bogus".*tool --help/i);
 });

@@ -1,0 +1,8 @@
+{
+  "commands": {
+    "data.import": {
+      "region": "eu-west-1",
+      "tag": ["scheduled"]
+    }
+  }
+}

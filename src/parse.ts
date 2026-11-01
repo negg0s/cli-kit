@@ -7,13 +7,55 @@ export type ParseResult<T extends OptionMap> = {
   positionals: string[];
 };
 
-export function parseArgs<T extends OptionMap>(definitions: T, argv: readonly string[]): ParseResult<T> {
+export function parseOptionValue(definition: OptionDefinition, raw: unknown, label: string, envSource = false): unknown {
+  if (definition.type !== "boolean" && definition.multiple) {
+    if (!Array.isArray(raw)) throw new Error(`Invalid ${label}: expected an array`);
+    return raw.map((value) => parseOptionScalar(definition, value, label, envSource));
+  }
+  if (definition.type === "boolean" && envSource && typeof raw === "string") {
+    const value = raw.toLowerCase();
+    if (["true", "1", "yes"].includes(value)) return true;
+    if (["false", "0", "no"].includes(value)) return false;
+    throw new Error(`Invalid ${label}: expected a boolean (true/false, 1/0, or yes/no)`);
+  }
+  return parseOptionScalar(definition, raw, label, envSource);
+}
+
+function parseOptionScalar(definition: OptionDefinition, raw: unknown, label: string, allowNumericString: boolean): unknown {
+  if (definition.type === "boolean") {
+    if (typeof raw !== "boolean") throw new Error(`Invalid ${label}: expected a boolean`);
+    return raw;
+  }
+  if (definition.type === "number") {
+    if (typeof raw !== "number" && !(allowNumericString && typeof raw === "string")) {
+      throw new Error(`Invalid ${label}: expected a finite number`);
+    }
+    const value = typeof raw === "number" ? String(raw) : raw;
+    if (typeof value !== "string" || !NUMBER_PATTERN.test(value) || !Number.isFinite(Number(value))) {
+      throw new Error(`Invalid ${label}: expected a finite number`);
+    }
+    return Number(value);
+  }
+  if (typeof raw !== "string") throw new Error(`Invalid ${label}: expected a string`);
+  if (definition.type === "enum" && !definition.values.includes(raw)) {
+    throw new Error(`Invalid ${label}: expected one of ${definition.values.join(", ")}`);
+  }
+  return raw;
+}
+
+export function parseArgs<T extends OptionMap>(definitions: T, argv: readonly string[], fallbackValues: Record<string, unknown> = {}): ParseResult<T> {
   const values: Record<string, unknown> = {};
   const aliases = new Map<string, string>();
 
   for (const [name, definition] of Object.entries(definitions)) {
     if (!/^[a-zA-Z][a-zA-Z0-9-]*$/.test(name)) {
       throw new Error(`Invalid option name "${name}"`);
+    }
+    if (definition.type === "boolean" && "multiple" in definition && definition.multiple) {
+      throw new Error(`Boolean option --${name} cannot be repeated`);
+    }
+    if (definition.type !== "boolean" && definition.multiple && "default" in definition && definition.default !== undefined && !Array.isArray(definition.default)) {
+      throw new Error(`Default for repeated option --${name} must be an array`);
     }
     if (definition.alias !== undefined) {
       if (!/^[a-zA-Z]$/.test(definition.alias)) {
@@ -96,23 +138,32 @@ export function parseArgs<T extends OptionMap>(definitions: T, argv: readonly st
       index += 1;
     }
 
+    let parsedValue: unknown;
     if (definition.type === "number") {
       const numberValue = Number(value);
       if (!NUMBER_PATTERN.test(value) || !Number.isFinite(numberValue)) throw new Error(`Invalid value for --${name}: expected a finite number`);
-      values[name] = numberValue;
+      parsedValue = numberValue;
     } else if (definition.type === "enum") {
       if (!definition.values.includes(value)) {
         throw new Error(`Invalid value for --${name}: expected one of ${definition.values.join(", ")}`);
       }
-      values[name] = value;
+      parsedValue = value;
     } else {
-      values[name] = value;
+      parsedValue = value;
+    }
+
+    if (definition.multiple) {
+      const existing = values[name];
+      values[name] = [...(Array.isArray(existing) ? existing : []), parsedValue];
+    } else {
+      values[name] = parsedValue;
     }
   }
 
   for (const [name, definition] of Object.entries(definitions)) {
+    if (values[name] === undefined && Object.hasOwn(fallbackValues, name)) values[name] = fallbackValues[name];
     if (values[name] === undefined && "default" in definition && definition.default !== undefined) {
-      values[name] = definition.default;
+      values[name] = Array.isArray(definition.default) ? [...definition.default] : definition.default;
     }
     if (definition.type !== "boolean" && definition.required && values[name] === undefined) {
       throw new Error(`Missing required option --${name}`);

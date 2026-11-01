@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": ".tmp/examples",
+    "types": ["node"]
+  },
+  "include": ["examples/**/*.ts"]
+}

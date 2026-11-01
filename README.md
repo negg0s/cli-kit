@@ -1,23 +1,19 @@
 # cli-kit
 
-TypeScript tools for building command-line apps on Node.js. Runtime dependencies: none.
+TypeScript building blocks for Node.js command-line apps. Runtime dependencies: none. ESM only.
 
-## Requirements
+## Requirements and install
 
 - Node.js 22.6 or newer
-- TypeScript 5.9 or newer for building an app
-
-## Install
-
-Install from GitHub:
+- TypeScript 5.9 or newer in the application project
 
 ```sh
 npm install github:negg0s/cli-kit
 ```
 
-The package builds during installation. Its public entry point is ESM.
+The package builds during installation. It is published from this repository; install from GitHub until a registry package is available.
 
-## Define a command
+## Quick start
 
 ```ts
 import { defineCommand, option, runCli } from "@negg0s/cli-kit";
@@ -27,22 +23,18 @@ const greet = defineCommand({
   description: "Greet someone",
   options: {
     loud: option.boolean({ description: "Use uppercase" }),
-    format: option.enum(["text", "json"] as const, {
-      default: "text",
-      description: "Output format",
-    }),
+    format: option.enum(["text", "json"] as const, { default: "text" }),
   },
   args: [{ name: "name", required: true }],
   run({ options, args, stdout }) {
     const greeting = `Hello, ${args[0]}!`;
-    stdout.write(options.loud ? greeting.toUpperCase() + "\n" : greeting + "\n");
+    stdout.write(options.loud ? `${greeting.toUpperCase()}\n` : `${greeting}\n`);
   },
 });
 
 const result = await runCli({
   name: "hello",
   version: "1.0.0",
-  description: "A small greeting app",
   commands: [greet],
 }, process.argv.slice(2));
 
@@ -51,41 +43,148 @@ process.stderr.write(result.stderr);
 process.exitCode = result.exitCode;
 ```
 
-`options` and positional arguments are inferred from their definitions. The runner captures output and returns it with an exit code. It does not call `process.exit` or write to the process streams.
+Types for options and positionals are inferred from the command definition. `runCli` captures output and returns `{ exitCode, stdout, stderr }`; it does not write to process streams or call `process.exit`.
 
-## Argument behavior
+## Features
 
-- Long options use `--name value` or `--name=value`.
-- A one-letter alias uses `-n value`.
-- Boolean options use `--flag` and `--no-flag`.
-- `--` ends option parsing. Remaining tokens are positional values.
-- Repeated scalar options use the last value.
-- Unknown options, missing values, invalid numbers, and invalid enum values return an error result.
-- Extra or missing required positional arguments are rejected.
+| Need | API |
+| --- | --- |
+| Typed string, number, boolean, and enum flags | `option.*`, `defineCommand` |
+| Nested command trees | A command with `commands` instead of `run` |
+| Repeated flags and multiple input files | `multiple: true`, final `variadic: true` argument |
+| Configurable inputs | Explicit JSON config file and opted-in env vars |
+| Help and machine-readable help | `--help`, `--json-help`, `formatHelpJson` |
+| Bash, Zsh, and Fish completion | `completionScript` |
+| Small terminal prompts | `createPrompts`, `createReadlinePromptIO` |
+| Deterministic text tables | `formatTable` |
+| In-process tests | `runForTest` |
+| Starter project | `createCliProject` / `create-cli-kit` |
 
-The first release supports a flat list of commands. Nested command trees and plugin loading are not included.
+## Options and positional arguments
 
-## Help and completion
+- Long flags accept `--name value` and `--name=value`. One-letter aliases accept `-n value`.
+- Boolean flags accept `--flag`, `--no-flag`, `--flag=true`, and `--flag=false`.
+- `--` ends option parsing. Tokens after it are positional values.
+- Repeated scalar options use the last CLI value. Define `multiple: true` on string, number, or enum options to collect repeated CLI values into an array, in order. Boolean flags cannot be repeated this way.
+- Optional positionals are typed as `string | undefined`. A variadic positional is typed as `string[]` and must be the final argument. If required, it needs at least one value.
+- Optional positional arguments cannot appear before required positional arguments. Extra positionals, unknown options, invalid values, and missing required values return an error result with exit code 2.
 
-`runCli` handles root help, per-command help, `--version`, and `--json-help`. JSON help uses a `schemaVersion` field so tools can detect format changes.
+```ts
+const upload = defineCommand({
+  name: "upload",
+  description: "Upload files with labels",
+  options: { tag: option.string({ multiple: true }) },
+  args: [{ name: "files", required: true, variadic: true }],
+  run({ options, args }) {
+    // options.tag: string[] | undefined
+    // args[0]: string[]
+  },
+});
+```
 
-Generate static completions from the same command definitions:
+## Nested commands
+
+Groups are declared with `commands`; leaves have `run`:
+
+```ts
+const list = defineCommand({ name: "list", description: "List users", run() {} });
+const users = defineCommand({ name: "users", description: "Manage users", commands: [list] });
+// Add users to the app's commands. Invoke: app users list
+```
+
+Command path tokens come before options. Root, group, and leaf levels provide help. Invoking a group without a child prints its help. The JSON help schema is version 2 and represents child commands recursively.
+
+## Environment and JSON configuration
+
+Configuration is opt-in. Declare the exact environment variable on an option and, if needed, select one JSON file on the app. Relative paths resolve against `RunCliOptions.cwd` or the current directory. No config file is searched automatically.
+
+```ts
+const deploy = defineCommand({
+  name: "deploy",
+  description: "Deploy an environment",
+  options: {
+    region: option.string({ default: "us-east-1", env: "APP_REGION" }),
+    dryRun: option.boolean({ default: false, env: "APP_DRY_RUN" }),
+  },
+  run({ options }) { /* deploy using validated options */ },
+});
+
+const app = { name: "ops", version: "1.0.0", configFile: "ops.json", commands: [deploy] };
+```
+
+Example `ops.json`:
+
+```json
+{
+  "commands": {
+    "deploy": {
+      "region": "eu-west-1",
+      "dryRun": true
+    }
+  }
+}
+```
+
+For nested commands, config keys use the dotted path, such as `"data.import"`. Config option keys use long option names, not aliases. A shared file may include other command paths; only the selected command's options are applied and validated. Unknown keys for the selected command are errors.
+
+Values resolve by this order:
+
+| Priority | Source | Notes |
+| ---: | --- | --- |
+| 1 | CLI | Explicit flag values win. Repeated CLI occurrences collect in order. |
+| 2 | Environment | Only options with `env` participate. Defaults to `process.env`; pass `env` to `runCli` to replace it. |
+| 3 | JSON config | Explicit `configFile` or injected parsed `config`; arrays replace lower-priority arrays. |
+| 4 | Option default | Used when no higher-priority value is present. |
+
+Boolean env values accept `true`, `false`, `1`, `0`, `yes`, and `no`, case-insensitively. Repeated-option env values must be JSON arrays, for example `APP_TAGS='["daily","urgent"]'`. Config, env, and CLI values are validated; invalid configured/env values are errors even when a CLI value overrides them.
+
+For tests or embedding, `runCli(app, argv, { cwd, env, config })` injects runtime context. If `config` is provided, the file is not read.
+
+## Prompts and tables
+
+Prompts use an explicit I/O adapter, so importing the package does not capture process streams:
+
+```ts
+import { createPrompts, createReadlinePromptIO } from "@negg0s/cli-kit";
+
+const io = createReadlinePromptIO(process.stdin, process.stdout);
+const prompts = createPrompts(io);
+try {
+  const name = await prompts.text("Name?");
+  const confirmed = await prompts.confirm("Continue?");
+  const format = await prompts.select("Format?", [
+    { label: "Text", value: "text" },
+    { label: "JSON", value: "json" },
+  ]);
+  // EOF and AbortSignal cancellation return undefined.
+} finally {
+  io.close();
+}
+```
+
+Confirmation accepts `y`, `yes`, `n`, or `no`. A selection displays numbered choices and returns the chosen value. Invalid answers are errors; helpers do not retry invisibly.
+
+`formatTable(columns, rows)` renders plain text without ANSI sequences. Columns have a `key`, `header`, and optional `align: "left" | "right"`. Values are stringified with nullish values shown as blank; widths count Unicode code points, not terminal display cells.
+
+## Help, completion, and tests
+
+`runCli` handles `--help`, `--json-help`, and root `--version`. Static completion scripts are available for Bash, Zsh, and Fish:
 
 ```ts
 import { completionScript } from "@negg0s/cli-kit";
-
-const bashScript = completionScript(app, "bash");
-const zshScript = completionScript(app, "zsh");
-const fishScript = completionScript(app, "fish");
+const script = completionScript(app, "bash");
 ```
 
-Completion is static. It includes command names and option flags, but does not execute the app or provide dynamic value suggestions.
+Completion includes nested command names and declared flags. It does not execute the app and does not suggest dynamic option values.
 
-## Test commands without a subprocess
+`runForTest(app, argv)` uses the same runner without starting a subprocess:
 
-`runForTest(app, argv)` calls the same runner and returns `{ exitCode, stdout, stderr }`. Use it with Node's built-in test runner or another test framework.
+```ts
+import { runForTest } from "@negg0s/cli-kit";
+const result = await runForTest(app, ["deploy", "--dry-run"]);
+```
 
-## Create a starter project
+## Starter project
 
 ```sh
 npm exec --package=github:negg0s/cli-kit -- create-cli-kit --name sample-cli --dir ./sample-cli
@@ -95,7 +194,11 @@ npm run build
 node dist/index.js greet Ada
 ```
 
-The generator refuses an existing target directory and rejects path traversal segments. Generated projects depend on this GitHub repository until a registry release is available.
+The generator refuses an existing target and path traversal segments.
+
+## Scope
+
+cli-kit is a small command-definition and execution toolkit. It does not provide plugin loading, executable discovery, implicit config search, remote config, schema migrations, dynamic completion, or a general-purpose interactive UI. Applications own business logic, persistence, logging policy, and resource management.
 
 ## Development
 
@@ -103,10 +206,11 @@ The generator refuses an existing target directory and rejects path traversal se
 npm ci
 npm test
 npm run typecheck
+npm run examples:check
 npm pack --dry-run
 ```
 
-The runtime has no dependencies. TypeScript and Node.js type declarations are development dependencies.
+Runtime dependencies: none. TypeScript and Node.js type declarations are development dependencies.
 
 ## License
 

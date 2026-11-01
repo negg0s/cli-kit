@@ -27,6 +27,9 @@
     "build": "npm run clean && tsc -p tsconfig.json",
     "clean": "node --input-type=commonjs -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "typecheck": "tsc -p tsconfig.types.json",
+    "examples:check": "tsc -p tsconfig.examples.json",
+    "examples:run": "npm run examples:check && node .tmp/examples/examples/ops.js",
+    "examples:smoke": "npm run examples:check && node .tmp/examples/examples/ops.js data import sample.csv --tag ci",
     "test": "npm run build && node --test test/*.test.mjs",
     "prepare": "npm run build"
   },
