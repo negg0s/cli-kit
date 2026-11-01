@@ -46,6 +46,7 @@ export async function resolveOptionSources(
   commandPath: readonly string[],
   appConfigFile: string | undefined,
   runtime: RunCliOptions = {},
+  scope: "global" | "command" = "command",
 ): Promise<Record<string, unknown>> {
   const cwd = runtime.cwd ?? process.cwd();
   const env = runtime.env ?? process.env;
@@ -56,21 +57,31 @@ export async function resolveOptionSources(
 
   if (!isRecord(config)) throw new Error("Invalid JSON config: expected an object");
   for (const key of Object.keys(config)) {
-    if (key !== "commands") throw new Error(`Unknown config key "${key}"`);
+    if (key !== "commands" && key !== "global") throw new Error(`Unknown config key "${key}"`);
   }
-  if (!isRecord(config.commands)) throw new Error('Invalid JSON config: expected a "commands" object');
+  const commandConfig = Object.hasOwn(config, "commands") ? config.commands : {};
+  if (!isRecord(commandConfig)) throw new Error('Invalid JSON config: expected a "commands" object');
+  if (Object.hasOwn(config, "global") && !isRecord(config.global)) {
+    throw new Error('Invalid JSON config: expected a "global" object');
+  }
 
-  const commands = config.commands;
+  const commands = commandConfig;
   const selectedConfigKey = commandPath.join(".");
-  const selectedConfig = Object.hasOwn(commands, selectedConfigKey) ? commands[selectedConfigKey] : undefined;
+  const selectedConfig = scope === "global"
+    ? config.global
+    : Object.hasOwn(commands, selectedConfigKey) ? commands[selectedConfigKey] : undefined;
   if (selectedConfig !== undefined && !isRecord(selectedConfig)) {
-    throw new Error(`Invalid config for command "${selectedConfigKey}": expected an object`);
+    const scopeName = scope === "global" ? "global" : `command "${selectedConfigKey}"`;
+    throw new Error(`Invalid config for ${scopeName}: expected an object`);
   }
   const configValues = (selectedConfig ?? {}) as Record<string, unknown>;
   const sourceValues: Record<string, unknown> = {};
 
   for (const [name, value] of Object.entries(configValues)) {
-    if (!Object.hasOwn(options, name)) throw new Error(`Unknown config option "${name}" for command "${selectedConfigKey}"`);
+    if (!Object.hasOwn(options, name)) {
+      const scopeName = scope === "global" ? "global" : `command "${selectedConfigKey}"`;
+      throw new Error(`Unknown ${scope === "global" ? "global " : ""}config option "${name}" for ${scopeName}`);
+    }
     const definition = options[name]!;
     sourceValues[name] = parseOptionValue(definition, value, `config option ${name}`);
   }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { defineCommand, option, runCli } from "../dist/index.js";
+import { defineCommand, defineCommandWithGlobals, option, runCli } from "../dist/index.js";
 
 async function tempDirectory() {
   const parent = join(process.cwd(), ".tmp");
@@ -108,4 +108,55 @@ test("rejects malformed or missing explicit config files", async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("resolves global options with CLI, env, global config, and default precedence", async () => {
+  const globalOptions = {
+    verbose: option.boolean({ default: false, env: "APP_VERBOSE" }),
+    region: option.enum(["us", "eu"], { default: "us", env: "APP_REGION" }),
+    tag: option.string({ multiple: true, env: "APP_TAGS" }),
+  };
+  const command = defineCommandWithGlobals(globalOptions, {
+    name: "show",
+    description: "Show global inputs",
+    run({ globalOptions, stdout }) { stdout.write(JSON.stringify(globalOptions)); },
+  });
+  const app = { name: "tool", version: "1", globalOptions, commands: [command] };
+  const config = { global: { verbose: true, region: "eu", tag: ["config"] }, commands: {} };
+
+  const fromEnv = await runCli(app, ["show"], { env: { APP_VERBOSE: "no", APP_REGION: "us", APP_TAGS: '["env"]' }, config });
+  assert.deepEqual(JSON.parse(fromEnv.stdout), { verbose: false, region: "us", tag: ["env"] });
+
+  const fromConfig = await runCli(app, ["show"], { env: {}, config });
+  assert.deepEqual(JSON.parse(fromConfig.stdout), { verbose: true, region: "eu", tag: ["config"] });
+
+  const globalOnly = await runCli(app, ["show"], { env: {}, config: { global: { verbose: true } } });
+  assert.deepEqual(JSON.parse(globalOnly.stdout), { verbose: true, region: "us" });
+
+  const fromDefault = await runCli(app, ["show"], { env: {}, config: { commands: {} } });
+  assert.deepEqual(JSON.parse(fromDefault.stdout), { verbose: false, region: "us" });
+
+  const fromCli = await runCli(app, ["--no-verbose", "--region", "us", "show", "--tag", "cli"], { env: {}, config });
+  assert.deepEqual(JSON.parse(fromCli.stdout), { verbose: false, region: "us", tag: ["cli"] });
+
+  const invalidOverridden = await runCli(app, ["--region", "us", "show"], {
+    env: { APP_REGION: "invalid" },
+    config,
+  });
+  assert.equal(invalidOverridden.exitCode, 2);
+  assert.match(invalidOverridden.stderr, /APP_REGION.*one of us, eu/i);
+});
+
+test("rejects unknown and malformed global config values", async () => {
+  const globalOptions = { verbose: option.boolean() };
+  const command = defineCommandWithGlobals(globalOptions, { name: "show", description: "Show", run() {} });
+  const app = { name: "tool", version: "1", globalOptions, commands: [command] };
+
+  const unknown = await runCli(app, ["show"], { env: {}, config: { global: { typo: true }, commands: {} } });
+  assert.equal(unknown.exitCode, 2);
+  assert.match(unknown.stderr, /unknown global config option.*typo/i);
+
+  const malformed = await runCli(app, ["show"], { env: {}, config: { global: true, commands: {} } });
+  assert.equal(malformed.exitCode, 2);
+  assert.match(malformed.stderr, /global.*object/i);
 });

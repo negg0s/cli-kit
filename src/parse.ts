@@ -105,7 +105,7 @@ export function parseArgs<T extends OptionMap>(definitions: T, argv: readonly st
 
     let negated = false;
     let name = rawName;
-    if (name.startsWith("no-")) {
+    if (!Object.hasOwn(definitions, name) && name.startsWith("no-")) {
       name = name.slice(3);
       negated = true;
     }

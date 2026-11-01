@@ -1,4 +1,7 @@
 {
+  "global": {
+    "verbose": true
+  },
   "commands": {
     "data.import": {
       "region": "eu-west-1",

@@ -1,4 +1,8 @@
-import { defineCommand, formatTable, option, runCli } from "@negg0s/cli-kit";
+import { defineCommand, defineCommandWithGlobals, formatTable, option, runCli } from "@negg0s/cli-kit";
+
+const globalOptions = {
+  verbose: option.boolean({ default: false, env: "OPS_VERBOSE", description: "Print verbose status" }),
+};
 
 const userList = defineCommand({
   name: "list",
@@ -18,7 +22,7 @@ const userList = defineCommand({
 const users = defineCommand({ name: "users", description: "Manage users", commands: [userList] });
 const admin = defineCommand({ name: "admin", description: "Administration commands", commands: [users] });
 
-const dataImport = defineCommand({
+const dataImport = defineCommandWithGlobals(globalOptions, {
   name: "import",
   description: "Import one or more files",
   options: {
@@ -26,8 +30,8 @@ const dataImport = defineCommand({
     region: option.string({ default: "us-east-1", env: "OPS_REGION" }),
   },
   args: [{ name: "files", required: true, variadic: true }],
-  run({ options, args, stdout }) {
-    stdout.write(JSON.stringify({ files: args[0], tags: options.tag ?? [], region: options.region }) + "\n");
+  run({ globalOptions, options, args, stdout }) {
+    stdout.write(JSON.stringify({ files: args[0], tags: options.tag ?? [], region: options.region, verbose: globalOptions.verbose }) + "\n");
   },
 });
 const data = defineCommand({ name: "data", description: "Data operations", commands: [dataImport] });
@@ -37,6 +41,7 @@ const app = {
   version: "1.0.0",
   description: "Example administration and data CLI",
   configFile: "examples/ops.json",
+  globalOptions,
   commands: [admin, data],
 };
 

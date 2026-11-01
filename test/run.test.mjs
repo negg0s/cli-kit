@@ -1,6 +1,6 @@
 ﻿import assert from "node:assert/strict";
 import test from "node:test";
-import { defineCommand, runCli, runForTest, option } from "../dist/index.js";
+import { defineCommand, defineCommandWithGlobals, runCli, runForTest, option } from "../dist/index.js";
 
 test("dispatches a command and captures handler output", async () => {
   const greet = defineCommand({
@@ -54,6 +54,7 @@ test("shows root and command help and returns versioned JSON help", async () => 
     schemaVersion: 2,
     name: "greet",
     description: "Say hello",
+    globalOptions: [],
     options: [],
     args: [],
     commands: [],
@@ -160,6 +161,7 @@ test("dispatches nested commands and shows help at root, group, and leaf levels"
     schemaVersion: 2,
     name: "data",
     description: "Data tools",
+    globalOptions: [],
     options: [],
     args: [],
     commands: [{ name: "import", description: "Import records", options: [], args: [], commands: [] }],
@@ -178,4 +180,123 @@ test("rejects unknown root flags instead of reporting successful help", async ()
   const result = await runCli(app, ["--bogus"]);
   assert.equal(result.exitCode, 2);
   assert.match(result.stderr, /unknown option "--bogus".*tool --help/i);
+});
+
+test("parses typed global options before and after nested command paths", async () => {
+  const globalOptions = {
+    verbose: option.boolean({ alias: "v", default: false }),
+    region: option.enum(["us", "eu"], { default: "us" }),
+    tag: option.string({ multiple: true }),
+  };
+  const deploy = defineCommandWithGlobals(globalOptions, {
+    name: "deploy",
+    description: "Deploy files",
+    options: { dryRun: option.boolean() },
+    args: [{ name: "file", required: true }],
+    run({ globalOptions, options, args, stdout }) {
+      stdout.write(JSON.stringify({ globalOptions, options, args }));
+    },
+  });
+  const group = defineCommand({ name: "ops", description: "Operations", commands: [deploy] });
+  const app = { name: "tool", version: "1", globalOptions, commands: [group] };
+
+  const before = await runCli(app, ["-v", "--region", "eu", "ops", "deploy", "file.txt", "--dryRun", "--tag", "nightly"]);
+  assert.deepEqual(JSON.parse(before.stdout), {
+    globalOptions: { verbose: true, region: "eu", tag: ["nightly"] },
+    options: { dryRun: true },
+    args: ["file.txt"],
+  });
+
+  const after = await runCli(app, ["ops", "deploy", "file.txt", "--no-verbose", "--region=us", "--tag", "release"]);
+  assert.deepEqual(JSON.parse(after.stdout), {
+    globalOptions: { verbose: false, region: "us", tag: ["release"] },
+    options: {},
+    args: ["file.txt"],
+  });
+});
+
+test("rejects conflicting global/local option names, aliases, and reserved names", async () => {
+  const conflict = defineCommand({
+    name: "run",
+    description: "Conflict",
+    options: { verbose: option.string({ alias: "v" }) },
+    run() {},
+  });
+  const nameConflict = await runCli({
+    name: "tool", version: "1", globalOptions: { verbose: option.boolean() }, commands: [conflict],
+  }, ["run"]);
+  assert.equal(nameConflict.exitCode, 2);
+  assert.match(nameConflict.stderr, /global.*local.*verbose/i);
+
+  const rootHelpConflict = await runCli({
+    name: "tool", version: "1", globalOptions: { verbose: option.boolean() }, commands: [conflict],
+  }, ["--help"]);
+  assert.equal(rootHelpConflict.exitCode, 2);
+  assert.match(rootHelpConflict.stderr, /global.*local.*verbose/i);
+
+  const leafHelpConflict = await runCli({
+    name: "tool", version: "1", globalOptions: { verbose: option.boolean() }, commands: [conflict],
+  }, ["run", "--json-help"]);
+  assert.equal(leafHelpConflict.exitCode, 2);
+  assert.match(leafHelpConflict.stderr, /global.*local.*verbose/i);
+
+  const aliasConflict = await runCli({
+    name: "tool", version: "1", globalOptions: { trace: option.boolean({ alias: "v" }) }, commands: [conflict],
+  }, ["run"]);
+  assert.equal(aliasConflict.exitCode, 2);
+  assert.match(aliasConflict.stderr, /alias.*v/i);
+
+  const reserved = await runCli({
+    name: "tool", version: "1", globalOptions: { help: option.boolean() }, commands: [conflict],
+  }, ["run"]);
+  assert.equal(reserved.exitCode, 2);
+  assert.match(reserved.stderr, /Global option --help is reserved/i);
+
+  const reservedAlias = await runCli({
+    name: "tool", version: "1", globalOptions: { verbose: option.boolean({ alias: "h" }) }, commands: [conflict],
+  }, ["--help"]);
+  assert.equal(reservedAlias.exitCode, 2);
+  assert.match(reservedAlias.stderr, /alias -h is reserved/i);
+});
+
+test("accepts a global option with a no-prefixed name", async () => {
+  const globalOptions = { "no-cache": option.boolean({ default: false }) };
+  const command = defineCommandWithGlobals(globalOptions, {
+    name: "show", description: "Show", run({ globalOptions, stdout }) { stdout.write(String(globalOptions["no-cache"])); },
+  });
+  const result = await runCli({ name: "tool", version: "1", globalOptions, commands: [command] }, ["--no-cache", "show"]);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.stdout, "true");
+});
+
+test("lists globals at each help level and in schema version 2 JSON", async () => {
+  const globalOptions = { verbose: option.boolean({ alias: "v", description: "Verbose output" }) };
+  const leaf = defineCommandWithGlobals(globalOptions, { name: "list", description: "List data", run() {} });
+  const group = defineCommand({ name: "data", description: "Data commands", commands: [leaf] });
+  const app = { name: "tool", version: "1", globalOptions, commands: [group] };
+
+  for (const argv of [["--help"], ["data", "--help"], ["data", "list", "--help"]]) {
+    const result = await runCli(app, argv);
+    assert.match(result.stdout, /Global options:/);
+    assert.match(result.stdout, /--verbose/);
+  }
+  const json = await runCli(app, ["data", "list", "--json-help"]);
+  const parsed = JSON.parse(json.stdout);
+  assert.deepEqual(parsed.globalOptions, [{ name: "verbose", type: "boolean", description: "Verbose output", alias: "v" }]);
+  assert.equal(parsed.options.length, 0);
+});
+
+test("checks required global options and rejects globals between group and leaf", async () => {
+  const globalOptions = { token: option.string({ required: true }) };
+  const leaf = defineCommandWithGlobals(globalOptions, { name: "run", description: "Run", run() {} });
+  const group = defineCommand({ name: "ops", description: "Operations", commands: [leaf] });
+  const app = { name: "tool", version: "1", globalOptions, commands: [group] };
+
+  const missing = await runCli(app, ["ops", "run"]);
+  assert.equal(missing.exitCode, 2);
+  assert.match(missing.stderr, /missing required option --token/i);
+
+  const misplaced = await runCli(app, ["ops", "--token", "secret", "run"]);
+  assert.equal(misplaced.exitCode, 2);
+  assert.match(misplaced.stderr, /global options must appear before/i);
 });

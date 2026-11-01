@@ -1,7 +1,7 @@
 ﻿export { parseArgs } from "./parse.js";
 export { option } from "./types.js";
 export type * from "./types.js";
-export { defineCommand, runCli } from "./run.js";
+export { defineCommand, defineCommandWithGlobals, runCli } from "./run.js";
 export { runForTest } from "./testing.js";
 export type { CliDefinition, CliResult } from "./help.js";
 export type { RunCliOptions } from "./config.js";

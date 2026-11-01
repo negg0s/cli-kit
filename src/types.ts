@@ -73,9 +73,11 @@ export type ParsedArguments<T extends readonly ArgumentDefinition[]> = {
 export type CommandContext<
   TOptions extends OptionMap,
   TArgs extends readonly ArgumentDefinition[] = readonly ArgumentDefinition[],
+  TGlobalOptions extends OptionMap = {},
 > = {
   options: ParsedOptions<TOptions>;
   args: ParsedArguments<TArgs>;
+  globalOptions: ParsedOptions<TGlobalOptions>;
   stdout: { write(text: string): void };
   stderr: { write(text: string): void };
 };
@@ -83,12 +85,13 @@ export type CommandContext<
 export type CommandDefinition<
   TOptions extends OptionMap = OptionMap,
   TArgs extends readonly ArgumentDefinition[] = readonly ArgumentDefinition[],
+  TGlobalOptions extends OptionMap = {},
 > = {
   name: string;
   description: string;
   options?: TOptions;
   args?: TArgs;
-  run: (context: CommandContext<TOptions, TArgs>) => number | void | Promise<number | void>;
+  run: (context: CommandContext<TOptions, TArgs, TGlobalOptions>) => number | void | Promise<number | void>;
 };
 
 export type CommandGroupDefinition<TCommands extends readonly CommandNode[] = readonly CommandNode[]> = {
@@ -97,7 +100,7 @@ export type CommandGroupDefinition<TCommands extends readonly CommandNode[] = re
   commands: TCommands;
 };
 
-export type CommandNode = CommandDefinition<any, any> | CommandGroupDefinition<any>;
+export type CommandNode = CommandDefinition<any, any, any> | CommandGroupDefinition<any>;
 
 type StringConfig = ScalarConfig<string> | MultipleConfig<string>;
 type BooleanConfig = OptionCommon & { default?: boolean };

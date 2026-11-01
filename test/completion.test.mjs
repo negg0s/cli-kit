@@ -73,8 +73,8 @@ test("uses ordered path checks for fish completions with overlapping command nam
   };
   const fish = completionScript(app, "fish");
   assert.match(fish, /function __workbench_path_is/);
-  assert.match(fish, /__workbench_path_is workbench data import/);
-  assert.match(fish, /__workbench_path_is workbench admin data/);
+  assert.match(fish, /__workbench_path_is prefix data import/);
+  assert.match(fish, /__workbench_path_is prefix admin data/);
   assert.match(completionScript(app, "bash"), /--json-help/);
 });
 
@@ -90,6 +90,24 @@ test("keeps bash and zsh completion context after leaf flags and their values", 
   };
   const bash = completionScript(app, "bash");
   const zsh = completionScript(app, "zsh");
-  assert.match(bash, /'data import '\*\) command_path='data import'/);
-  assert.match(zsh, /'data import '\*\) command_options=/);
+  assert.match(bash, /case "\$command_path\|\$word" in/);
+  assert.match(bash, /'data\|import'\) command_path='data import'; break/);
+  assert.match(zsh, /while \(\( i < CURRENT \)\)/);
+  assert.match(zsh, /'data\|import'\) command_path='data import'; break/);
+});
+
+test("offers global flags at the root and in leaf command contexts", () => {
+  const command = { name: "show", description: "Show", options: { format: option.string() }, run() {} };
+  const app = {
+    name: "tool",
+    version: "1",
+    globalOptions: { verbose: option.boolean({ alias: "v" }) },
+    commands: [command],
+  };
+  const bash = completionScript(app, "bash");
+  assert.match(bash, /--format --verbose -v --no-verbose --help --json-help/);
+  assert.match(bash, /show --verbose -v --no-verbose --help --json-help --version/);
+  assert.match(bash, /--verbose\|-v\|--no-verbose/);
+  assert.match(completionScript(app, "zsh"), /--verbose\|-v\|--no-verbose/);
+  assert.match(completionScript(app, "fish"), /case '--verbose' '-v' '--no-verbose'/);
 });

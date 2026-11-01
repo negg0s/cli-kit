@@ -51,6 +51,7 @@ Types for options and positionals are inferred from the command definition. `run
 | --- | --- |
 | Typed string, number, boolean, and enum flags | `option.*`, `defineCommand` |
 | Nested command trees | A command with `commands` instead of `run` |
+| App-wide typed flags | `globalOptions`, `defineCommandWithGlobals` |
 | Repeated flags and multiple input files | `multiple: true`, final `variadic: true` argument |
 | Configurable inputs | Explicit JSON config file and opted-in env vars |
 | Help and machine-readable help | `--help`, `--json-help`, `formatHelpJson` |
@@ -94,6 +95,27 @@ const users = defineCommand({ name: "users", description: "Manage users", comman
 
 Command path tokens come before options. Root, group, and leaf levels provide help. Invoking a group without a child prints its help. The JSON help schema is version 2 and represents child commands recursively.
 
+### App-wide options
+
+Declare flags once on `globalOptions`. Use `defineCommandWithGlobals` for leaf commands whose handlers need typed access; those values are exposed separately from local `options`:
+
+```ts
+import { defineCommandWithGlobals, option } from "@negg0s/cli-kit";
+
+const globalOptions = { verbose: option.boolean({ default: false, alias: "v" }) };
+const deploy = defineCommandWithGlobals(globalOptions, {
+  name: "deploy",
+  description: "Deploy the app",
+  run({ globalOptions }) {
+    if (globalOptions.verbose) { /* enable app-specific verbose output */ }
+  },
+});
+
+const app = { name: "ops", version: "1.0.0", globalOptions, commands: [deploy] };
+```
+
+Pass the same option map to the app and command factory to keep handler types aligned. Ordinary `defineCommand` handlers can coexist and receive an empty `globalOptions` type. A global flag may appear before the command path (`ops --verbose deploy`) or after the complete path (`ops deploy --verbose`), but not between a group and its child. Global/local names and aliases cannot collide; `--help`, `--json-help`, `--version`, and `-h` are reserved. Root, group, and leaf help show a separate **Global options** section; JSON help includes a `globalOptions` array.
+
 ## Environment and JSON configuration
 
 Configuration is opt-in. Declare the exact environment variable on an option and, if needed, select one JSON file on the app. Relative paths resolve against `RunCliOptions.cwd` or the current directory. No config file is searched automatically.
@@ -116,6 +138,9 @@ Example `ops.json`:
 
 ```json
 {
+  "global": {
+    "verbose": true
+  },
   "commands": {
     "deploy": {
       "region": "eu-west-1",
@@ -126,6 +151,8 @@ Example `ops.json`:
 ```
 
 For nested commands, config keys use the dotted path, such as `"data.import"`. Config option keys use long option names, not aliases. A shared file may include other command paths; only the selected command's options are applied and validated. Unknown keys for the selected command are errors.
+
+Global option values are configured under the top-level `global` object. The `global` and `commands` sections are optional objects, and unknown top-level sections are errors. Environment variables are still opted in per option with `env`.
 
 Values resolve by this order:
 

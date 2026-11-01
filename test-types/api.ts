@@ -1,4 +1,4 @@
-﻿import { createPrompts, defineCommand, formatTable, option, runCli } from "../src/index.js";
+﻿import { createPrompts, defineCommand, defineCommandWithGlobals, formatTable, option, runCli } from "../src/index.js";
 
 defineCommand({
   name: "typed",
@@ -10,10 +10,11 @@ defineCommand({
     include: option.string({ multiple: true, default: ["base"] }),
   },
   args: [{ name: "file", required: true }, { name: "target" }, { name: "sources", variadic: true }],
-  run({ options, args }) {
+  run({ options, args, globalOptions }) {
     const level: number = options.level;
     const color: "red" | "blue" | undefined = options.color;
     const file: string = args[0];
+    const noGlobals: {} = globalOptions;
     const target: string | undefined = args[1];
     const sources: string[] = args[2];
     const tags: string[] | undefined = options.tags;
@@ -22,7 +23,7 @@ defineCommand({
     const invalid: "green" = options.color;
     // @ts-expect-error optional positional values may be absent
     const requiredTarget: string = args[1];
-    void [level, color, file, target, sources, tags, include, invalid, requiredTarget];
+    void [level, color, file, target, sources, tags, include, invalid, requiredTarget, noGlobals];
   },
 });
 
@@ -63,3 +64,22 @@ void prompts.select("Format?", [{ label: "JSON", value: "json" }, { label: "Text
   void format;
 });
 formatTable([{ key: "name", header: "Name" }], [{ name: "Ada" }]);
+
+const globals = {
+  verbose: option.boolean({ default: false }),
+  region: option.enum(["us-east-1", "eu-west-1"] as const, { default: "us-east-1" }),
+};
+const globalAware = defineCommandWithGlobals(globals, {
+  name: "deploy",
+  description: "Deploy using app-wide options",
+  options: { dryRun: option.boolean() },
+  run({ globalOptions, options }) {
+    const verbose: boolean = globalOptions.verbose;
+    const region: "us-east-1" | "eu-west-1" = globalOptions.region;
+    const dryRun: boolean | undefined = options.dryRun;
+    // @ts-expect-error local option values remain separate from app-wide options
+    const invalid: boolean = globalOptions.dryRun;
+    void [verbose, region, dryRun, invalid];
+  },
+});
+void runCli({ name: "global-app", version: "1", globalOptions: globals, commands: [globalAware] }, []);

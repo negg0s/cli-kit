@@ -48,6 +48,14 @@ test("rejects duplicate aliases and missing required values", () => {
   assert.throws(() => parseArgs({ name: { type: "string", required: true } }, []), /missing required option --name/i);
 });
 
+test("allows declared option names beginning with no- without breaking boolean negation", () => {
+  const parsed = parseArgs({
+    "no-cache": { type: "boolean" },
+    cache: { type: "boolean" },
+  }, ["--no-cache", "--cache"]);
+  assert.deepEqual(parsed.values, { "no-cache": true, cache: true });
+});
+
 test("collects repeated options in order and preserves array defaults", () => {
   const repeated = parseArgs({ tag: { type: "string", multiple: true, default: ["base"] } }, ["--tag", "red", "--tag=blue"]);
   assert.deepEqual(repeated.values, { tag: ["red", "blue"] });
