@@ -28,6 +28,9 @@ test("generates static bash, zsh, and fish completions for commands and options"
   assert.match(bash, /-o/);
   assert.match(zsh, /--output/);
   assert.match(zsh, /-o/);
+  assert.match(zsh, /local -a command_list command_options/);
+  assert.match(zsh, /_describe -t commands 'command' command_list/);
+  assert.doesNotMatch(zsh, /_describe[^\n]*'\(/);
   assert.match(fish, /-l 'output'/);
   assert.match(fish, /-s 'o'/);
   for (const output of [bash, zsh, fish]) assert.match(output, /help/);

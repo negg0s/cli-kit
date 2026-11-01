@@ -51,18 +51,28 @@ export function completionScript(app: CliDefinition, shell: CompletionShell): st
   }
 
   if (shell === "zsh") {
-    const commandList = [...commands.map(({ name }) => name), "--help", "--version"].join(" ");
-    const cases = commands.map(({ name, options }) => `    ${name}) _arguments ${options.map((value) => `'${value}[${value}]'`).join(" ")} ;;`).join("\n");
+    const commandList = [
+      ...commands.map(({ name }) => `'${name}:${name}'`),
+      "'--help:Show help'",
+      "'--version:Show version'",
+    ].join(" ");
+    const cases = commands.map(({ name, options }) => {
+      const optionSpecs = options.map((value) => `'${value}[${value}]'`).join(" ");
+      return `    ${name}) command_options=(${optionSpecs}) ;;`;
+    }).join("\n");
     return [
       `#compdef ${app.name}`,
       `_${app.name}() {`,
+      "  local -a command_list command_options",
+      `  command_list=(${commandList})`,
       "  if (( CURRENT == 2 )); then",
-      `    _describe 'command' '(${commandList})'`,
+      "    _describe -t commands 'command' command_list",
       "    return",
       "  fi",
       "  case \"$words[2]\" in",
       cases,
       "  esac",
+      "  (( $#command_options )) && _arguments $command_options",
       "}",
       `compdef _${app.name} ${app.name}`,
       "",
