@@ -1,6 +1,6 @@
 # cli-kit
 
-TypeScript building blocks for Node.js command-line apps. Runtime dependencies: none. ESM only.
+Typed building blocks for Node.js command-line apps. ESM only, with no runtime dependencies.
 
 ## Requirements and install
 
@@ -11,7 +11,7 @@ TypeScript building blocks for Node.js command-line apps. Runtime dependencies: 
 npm install github:negg0s/cli-kit
 ```
 
-The package builds during installation. It is published from this repository; install from GitHub until a registry package is available.
+The package builds during installation. Install it from GitHub for now.
 
 ## Quick start
 
@@ -43,7 +43,7 @@ process.stderr.write(result.stderr);
 process.exitCode = result.exitCode;
 ```
 
-Types for options and positionals are inferred from the command definition. `runCli` captures output and returns `{ exitCode, stdout, stderr }`; it does not write to process streams or call `process.exit`.
+TypeScript infers option and positional types from each command definition. `runCli` captures output and returns `{ exitCode, stdout, stderr }`. It does not write to process streams or call `process.exit`.
 
 ## Features
 
@@ -56,17 +56,17 @@ Types for options and positionals are inferred from the command definition. `run
 | Configurable inputs | Explicit JSON config file and opted-in env vars |
 | Help and machine-readable help | `--help`, `--json-help`, `formatHelpJson` |
 | Bash, Zsh, and Fish completion | `completionScript` |
-| Small terminal prompts | `createPrompts`, `createReadlinePromptIO` |
+| Terminal prompts | `createPrompts`, `createReadlinePromptIO` |
 | Deterministic text tables | `formatTable` |
 | In-process tests | `runForTest` |
 | Starter project | `createCliProject` / `create-cli-kit` |
 
 ## Options and positional arguments
 
-- Long flags accept `--name value` and `--name=value`. One-letter aliases accept `-n value`.
-- Boolean flags accept `--flag`, `--no-flag`, `--flag=true`, and `--flag=false`.
+- Long flags accept `--name value` and `--name=value`. Use `-n value` for a one-letter alias or a one-letter option name.
+- Boolean flags accept `--flag`, `--no-flag`, `--flag=true`, and `--flag=false`. Negated flags do not accept inline values.
 - `--` ends option parsing. Tokens after it are positional values.
-- Repeated scalar options use the last CLI value. Define `multiple: true` on string, number, or enum options to collect repeated CLI values into an array, in order. Boolean flags cannot be repeated this way.
+- Repeated scalar options use the last CLI value. Set `multiple: true` on a string, number, or enum option to collect CLI values into an array. Boolean flags cannot use `multiple`.
 - Optional positionals are typed as `string | undefined`. A variadic positional is typed as `string[]` and must be the final argument. If required, it needs at least one value.
 - Optional positional arguments cannot appear before required positional arguments. Extra positionals, unknown options, invalid values, and missing required values return an error result with exit code 2.
 
@@ -93,7 +93,7 @@ const users = defineCommand({ name: "users", description: "Manage users", comman
 // Add users to the app's commands. Invoke: app users list
 ```
 
-Command path tokens come before options. Root, group, and leaf levels provide help. Invoking a group without a child prints its help. The JSON help schema is version 2 and represents child commands recursively.
+Put command path tokens before command options. Root, group, and leaf commands provide help. Invoking a group without a child prints its help. JSON help uses schema version 2 and lists nested commands recursively.
 
 ### App-wide options
 
@@ -114,11 +114,11 @@ const deploy = defineCommandWithGlobals(globalOptions, {
 const app = { name: "ops", version: "1.0.0", globalOptions, commands: [deploy] };
 ```
 
-Pass the same option map to the app and command factory to keep handler types aligned. Ordinary `defineCommand` handlers can coexist and receive an empty `globalOptions` type. A global flag may appear before the command path (`ops --verbose deploy`) or after the complete path (`ops deploy --verbose`), but not between a group and its child. Global/local names and aliases cannot collide; `--help`, `--json-help`, `--version`, and `-h` are reserved. Root, group, and leaf help show a separate **Global options** section; JSON help includes a `globalOptions` array.
+Pass the same option map to the app and command factory so handler types stay aligned. Commands declared with `defineCommand` can also coexist; their `globalOptions` type is empty. Put global flags before the command path (`ops --verbose deploy`) or after the full path (`ops deploy --verbose`). Do not put them between a group and its child. Global and local option spellings must not conflict. Global options cannot use runner-reserved names or aliases. Leaf options cannot use `help`, `json-help`, or alias `h`. Help output has a separate **Global options** section. JSON help includes a `globalOptions` array.
 
 ## Environment and JSON configuration
 
-Configuration is opt-in. Declare the exact environment variable on an option and, if needed, select one JSON file on the app. Relative paths resolve against `RunCliOptions.cwd` or the current directory. No config file is searched automatically.
+Configuration is opt-in. Set `env` on each option that may read an environment variable. Set `configFile` on the app to load a JSON file. Relative paths resolve against `RunCliOptions.cwd`, or the current directory by default. The CLI does not search for config files.
 
 ```ts
 const deploy = defineCommand({
@@ -150,26 +150,26 @@ Example `ops.json`:
 }
 ```
 
-For nested commands, config keys use the dotted path, such as `"data.import"`. Config option keys use long option names, not aliases. A shared file may include other command paths; only the selected command's options are applied and validated. Unknown keys for the selected command are errors.
+For nested commands, use dotted command paths such as `"data.import"`. Config option keys use long names, not aliases. A shared file can contain settings for several commands. The CLI applies and validates settings for the selected command; unknown keys there are errors.
 
-Global option values are configured under the top-level `global` object. The `global` and `commands` sections are optional objects, and unknown top-level sections are errors. Environment variables are still opted in per option with `env`.
+Put global option values under the top-level `global` object. Both `global` and `commands` are optional. Other top-level sections are errors. Environment variables remain opt-in through each option's `env` setting.
 
 Values resolve by this order:
 
 | Priority | Source | Notes |
 | ---: | --- | --- |
-| 1 | CLI | Explicit flag values win. Repeated CLI occurrences collect in order. |
-| 2 | Environment | Only options with `env` participate. Defaults to `process.env`; pass `env` to `runCli` to replace it. |
-| 3 | JSON config | Explicit `configFile` or injected parsed `config`; arrays replace lower-priority arrays. |
+| 1 | CLI | Explicit values win. Repeated CLI values collect in order. |
+| 2 | Environment | Only options with `env` participate. Uses `process.env` by default; pass `env` to `runCli` to provide another object. |
+| 3 | JSON config | Read from `configFile` or supplied as parsed `config`. Arrays replace lower-priority arrays. |
 | 4 | Option default | Used when no higher-priority value is present. |
 
-Boolean env values accept `true`, `false`, `1`, `0`, `yes`, and `no`, case-insensitively. Repeated-option env values must be JSON arrays, for example `APP_TAGS='["daily","urgent"]'`. Config, env, and CLI values are validated; invalid configured/env values are errors even when a CLI value overrides them.
+Boolean environment values accept `true`, `false`, `1`, `0`, `yes`, or `no`, in any letter case. Repeated-option values must be JSON arrays, for example `APP_TAGS='["daily","urgent"]'`. The CLI validates config and environment values even when a command-line value overrides them.
 
-For tests or embedding, `runCli(app, argv, { cwd, env, config })` injects runtime context. If `config` is provided, the file is not read.
+For tests or embedding, pass `{ cwd, env, config }` as the third argument to `runCli`. A supplied `config` object replaces file loading.
 
 ## Prompts and tables
 
-Prompts use an explicit I/O adapter, so importing the package does not capture process streams:
+Prompts use an explicit I/O adapter. Importing the package does not capture process streams:
 
 ```ts
 import { createPrompts, createReadlinePromptIO } from "@negg0s/cli-kit";
@@ -189,20 +189,20 @@ try {
 }
 ```
 
-Confirmation accepts `y`, `yes`, `n`, or `no`. A selection displays numbered choices and returns the chosen value. Invalid answers are errors; helpers do not retry invisibly.
+Confirmations accept `y`, `yes`, `n`, or `no`. Selections show numbered choices and return the selected value. Invalid answers throw an error; the helpers do not retry.
 
 `formatTable(columns, rows)` renders plain text without ANSI sequences. Columns have a `key`, `header`, and optional `align: "left" | "right"`. Values are stringified with nullish values shown as blank; widths count Unicode code points, not terminal display cells.
 
 ## Help, completion, and tests
 
-`runCli` handles `--help`, `--json-help`, and root `--version`. Static completion scripts are available for Bash, Zsh, and Fish:
+`runCli` handles `-h`, `--help`, `--json-help`, and root `--version`. Generate static completion scripts for Bash, Zsh, or Fish:
 
 ```ts
 import { completionScript } from "@negg0s/cli-kit";
 const script = completionScript(app, "bash");
 ```
 
-Completion includes nested command names and declared flags. It does not execute the app and does not suggest dynamic option values.
+Completion lists nested command names and declared flags. It does not run the app or suggest dynamic option values.
 
 `runForTest(app, argv)` uses the same runner without starting a subprocess:
 
@@ -221,11 +221,11 @@ npm run build
 node dist/index.js greet Ada
 ```
 
-The generator refuses an existing target and path traversal segments.
+The generator refuses to overwrite an existing target or accept path traversal segments.
 
 ## Scope
 
-cli-kit is a small command-definition and execution toolkit. It does not provide plugin loading, executable discovery, implicit config search, remote config, schema migrations, dynamic completion, or a general-purpose interactive UI. Applications own business logic, persistence, logging policy, and resource management.
+cli-kit defines commands and runs them. It does not load plugins, discover executables, search for config files, fetch remote config, migrate schemas, complete dynamic values, or provide a general-purpose interactive UI. Your application handles business logic, persistence, logging, and resource management.
 
 ## Development
 
@@ -237,7 +237,7 @@ npm run examples:check
 npm pack --dry-run
 ```
 
-Runtime dependencies: none. TypeScript and Node.js type declarations are development dependencies.
+The package has no runtime dependencies. TypeScript and Node.js type declarations are development dependencies.
 
 ## License
 

@@ -39,7 +39,7 @@ const data = defineCommand({ name: "data", description: "Data operations", comma
 const app = {
   name: "ops",
   version: "1.0.0",
-  description: "Example administration and data CLI",
+  description: "Admin and data commands",
   configFile: "examples/ops.json",
   globalOptions,
   commands: [admin, data],
