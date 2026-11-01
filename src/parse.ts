@@ -1,4 +1,4 @@
-﻿import type { OptionDefinition, OptionMap, ParsedOptions } from "./types.js";
+import type { OptionDefinition, OptionMap, ParsedOptions } from "./types.js";
 
 const NUMBER_PATTERN = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
@@ -68,6 +68,12 @@ export function parseArgs<T extends OptionMap>(definitions: T, argv: readonly st
     }
   }
 
+  for (const [alias, name] of aliases) {
+    if (Object.hasOwn(definitions, alias) && alias !== name) {
+      throw new Error(`Option alias "${alias}" for --${name} conflicts with option --${alias}`);
+    }
+  }
+
   const positionals: string[] = [];
   let optionsEnded = false;
 
@@ -116,6 +122,9 @@ export function parseArgs<T extends OptionMap>(definitions: T, argv: readonly st
     }
 
     if (definition.type === "boolean") {
+      if (negated && inlineValue !== undefined) {
+        throw new Error(`Negated option --${name} cannot have an inline value`);
+      }
       if (inlineValue !== undefined) {
         if (inlineValue !== "true" && inlineValue !== "false") {
           throw new Error(`Invalid value for --${name}: expected true or false`);

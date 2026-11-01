@@ -48,6 +48,28 @@ test("rejects duplicate aliases and missing required values", () => {
   assert.throws(() => parseArgs({ name: { type: "string", required: true } }, []), /missing required option --name/i);
 });
 
+test("rejects aliases that collide with another option's one-letter long name in either order", () => {
+  assert.throws(
+    () => parseArgs({ alpha: { type: "string", alias: "b" }, b: { type: "string" } }, []),
+    /alias.*b.*option --b/i,
+  );
+  assert.throws(
+    () => parseArgs({ b: { type: "string" }, alpha: { type: "string", alias: "b" } }, []),
+    /alias.*b.*option --b/i,
+  );
+  assert.doesNotThrow(() => parseArgs({ beta: { type: "string", alias: "b" } }, []));
+});
+
+test("rejects inline values on negated booleans while plain negation remains false", () => {
+  for (const value of ["true", "false"]) {
+    assert.throws(
+      () => parseArgs({ boolean: { type: "boolean" } }, [`--no-boolean=${value}`]),
+      /negat.*inline|inline.*negat|cannot.*value/i,
+    );
+  }
+  assert.deepEqual(parseArgs({ boolean: { type: "boolean" } }, ["--no-boolean"]).values, { boolean: false });
+});
+
 test("allows declared option names beginning with no- without breaking boolean negation", () => {
   const parsed = parseArgs({
     "no-cache": { type: "boolean" },
