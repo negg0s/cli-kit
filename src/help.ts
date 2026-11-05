@@ -1,4 +1,4 @@
-﻿import type { ArgumentDefinition, CommandDefinition, OptionMap } from "./types.js";
+import type { ArgumentDefinition, CommandDefinition, OptionMap } from "./types.js";
 
 export type CliDefinition = {
   name: string;
@@ -20,6 +20,7 @@ function optionRows(options: OptionMap = {}) {
     description: definition.description ?? "",
     ...(definition.alias ? { alias: definition.alias } : {}),
     ...( "required" in definition && definition.required ? { required: true } : {}),
+    ...( "default" in definition && definition.default !== undefined ? { default: definition.default } : {}),
     ...(definition.type === "enum" ? { values: [...definition.values] } : {}),
   }));
 }
@@ -48,7 +49,8 @@ export function formatCommandHelp(appName: string, command: HelpCommand): string
     for (const option of options) {
       const alias = option.alias ? `-${option.alias}, ` : "";
       const values = option.values ? ` (${option.values.join(" | ")})` : "";
-      lines.push(`  ${alias}--${option.name}${values}${option.required ? " (required)" : ""}`);
+      const defaultStr = option.default !== undefined ? ` [default: ${JSON.stringify(option.default)}]` : "";
+      lines.push(`  ${alias}--${option.name}${values}${option.required ? " (required)" : ""}${defaultStr}`);
       if (option.description) lines.push(`      ${option.description}`);
     }
   }
@@ -61,7 +63,7 @@ export function formatRootHelp(app: CliDefinition): string {
   if (app.description) lines.push("", app.description);
   lines.push("", "Commands:");
   for (const command of app.commands) lines.push(`  ${command.name.padEnd(16)}${command.description}`);
-  lines.push("", "Options:", "  -h, --help       Show this help", "  --version        Show version");
+  lines.push("", "Options:", "  -h, --help       Show this help", "  -v, --version    Show version");
   return `${lines.join("\n")}\n`;
 }
 
