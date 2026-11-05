@@ -1,4 +1,4 @@
-﻿import { formatCommandHelp, formatHelpJson, formatRootHelp } from "./help.js";
+import { formatCommandHelp, formatHelpJson, formatRootHelp } from "./help.js";
 import { parseArgs } from "./parse.js";
 import type { CliDefinition, CliResult } from "./help.js";
 import type { ArgumentDefinition, CommandDefinition, OptionMap } from "./types.js";
@@ -21,7 +21,7 @@ function hasFlagBeforeTerminator(args: readonly string[], flag: string): boolean
 
 export async function runCli(app: CliDefinition, argv: readonly string[]): Promise<CliResult> {
   const args = [...argv];
-  if (args[0] === "--version") return writeResult(0, `${app.version}\n`);
+  if (args[0] === "--version" || args[0] === "-v") return writeResult(0, `${app.version}\n`);
   if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
     return writeResult(0, formatRootHelp(app));
   }

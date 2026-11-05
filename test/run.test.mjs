@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import test from "node:test";
 import { defineCommand, runCli, runForTest, option } from "../dist/index.js";
 
@@ -90,4 +90,15 @@ test("preserves captured output when a handler throws and respects the option te
   const app = { name: "sample", version: "1.0.0", commands: [command] };
   const result = await runCli(app, ["write", "--", "--help"]);
   assert.deepEqual(result, { exitCode: 2, stdout: "--help", stderr: "handler failed\n" });
+});
+
+test("supports root --version and -v flags", async () => {
+  const app = { name: "sample", version: "1.2.3", commands: [] };
+  const longVer = await runCli(app, ["--version"]);
+  assert.equal(longVer.stdout, "1.2.3\n");
+  assert.equal(longVer.exitCode, 0);
+
+  const shortVer = await runCli(app, ["-v"]);
+  assert.equal(shortVer.stdout, "1.2.3\n");
+  assert.equal(shortVer.exitCode, 0);
 });

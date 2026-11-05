@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import test from "node:test";
 import { parseArgs } from "../dist/index.js";
 
@@ -37,6 +37,11 @@ test("rejects malformed values and unknown options with a useful error", () => {
 test("boolean negation and -- terminator are handled", () => {
   const result = parseArgs({ color: { type: "boolean", default: true } }, ["--no-color", "--", "--literal"]);
   assert.deepEqual(result, { values: { color: false }, positionals: ["--literal"] });
+});
+
+test("supports option keys that literally start with no-", () => {
+  const result = parseArgs({ "no-verify": { type: "boolean", default: false } }, ["--no-verify"]);
+  assert.deepEqual(result.values, { "no-verify": true });
 });
 test("accepts negative finite numbers and uses the last repeated scalar value", () => {
   const result = parseArgs({ count: { type: "number" } }, ["--count", "-.5", "--count", "0"]);

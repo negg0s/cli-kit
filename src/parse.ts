@@ -1,4 +1,4 @@
-﻿import type { OptionDefinition, OptionMap, ParsedOptions } from "./types.js";
+import type { OptionDefinition, OptionMap, ParsedOptions } from "./types.js";
 
 const NUMBER_PATTERN = /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 
@@ -63,7 +63,7 @@ export function parseArgs<T extends OptionMap>(definitions: T, argv: readonly st
 
     let negated = false;
     let name = rawName;
-    if (name.startsWith("no-")) {
+    if (definitions[name] === undefined && name.startsWith("no-")) {
       name = name.slice(3);
       negated = true;
     }
