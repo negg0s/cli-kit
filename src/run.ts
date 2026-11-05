@@ -27,6 +27,18 @@ export async function runCli(app: CliDefinition, argv: readonly string[]): Promi
   }
 
   const commandName = args.shift()!;
+  if (commandName === "help" && !app.commands.some((c) => c.name === "help")) {
+    if (args.length === 0) {
+      return writeResult(0, formatRootHelp(app));
+    }
+    const targetName = args.shift()!;
+    const targetCommand = app.commands.find((entry) => entry.name === targetName);
+    if (!targetCommand) {
+      return writeResult(2, "", `Unknown command "${targetName}". Run ${app.name} --help for a list of commands.\n`);
+    }
+    return writeResult(0, formatCommandHelp(app.name, targetCommand));
+  }
+
   const command = app.commands.find((entry) => entry.name === commandName);
   if (!command) return writeResult(2, "", `Unknown command "${commandName}". Run ${app.name} --help for a list of commands.\n`);
 
