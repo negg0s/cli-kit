@@ -54,13 +54,13 @@ test("shows root and command help and returns versioned JSON help", async () => 
     description: "Start server",
     options: {
       port: option.number({ default: 8080, description: "Port to listen on" }),
-      host: option.string({ default: "localhost", alias: "h" }),
+      host: option.string({ default: "localhost", alias: "H" }),
     },
     run() {},
   });
   const serveHelp = await runCli({ name: "srv", version: "1.0.0", commands: [commandWithDefaults] }, ["serve", "--help"]);
-  assert.match(serveHelp.stdout, /--port \[default: 8080\]/);
-  assert.match(serveHelp.stdout, /-h, --host \[default: "localhost"\]/);
+  assert.match(serveHelp.stdout, /--port <value> \(default: 8080\)/);
+  assert.match(serveHelp.stdout, /-H, --host <value> \(default: "localhost"\)/);
 
   const json = await runCli(app, ["greet", "--json-help"]);
   assert.deepEqual(JSON.parse(json.stdout), {
