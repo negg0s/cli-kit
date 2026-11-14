@@ -190,7 +190,7 @@ export async function runCli(app: CliDefinition, argv: readonly string[], runtim
   } catch (error) {
     return writeResult(2, "", `${error instanceof Error ? error.message : "Invalid global options"}\n`);
   }
-  if (argv[0] === "--version") return writeResult(0, `${app.version}\n`);
+  if (argv[0] === "--version" || (argv[0] === "-v" && !Object.values(globalDefinitions).some((d) => d.alias === "v"))) return writeResult(0, `${app.version}\n`);
   if (argv[0] === "--json-help") return writeResult(0, formatHelpJson(app));
   if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
     return writeResult(0, formatRootHelp(app));
@@ -199,9 +199,26 @@ export async function runCli(app: CliDefinition, argv: readonly string[], runtim
   const leading = extractLeadingGlobals(argv, globalDefinitions);
   if (leading.error) return writeResult(2, "", `${leading.error.replace("Run the CLI with --help", `Run ${app.name} --help`)}\n`);
   const args = [...leading.remaining];
-  if (args[0] === "--version") return writeResult(0, `${app.version}\n`);
+  if (args[0] === "--version" || (args[0] === "-v" && !Object.values(globalDefinitions).some((d) => d.alias === "v"))) return writeResult(0, `${app.version}\n`);
   if (args[0] === "--json-help") return writeResult(0, formatHelpJson(app));
   if (args[0] === "--help" || args[0] === "-h" || args.length === 0) return writeResult(0, formatRootHelp(app));
+
+  if (args[0] === "help" && !app.commands.some((c) => c.name === "help")) {
+    args.shift();
+    if (args.length === 0) {
+      return writeResult(0, formatRootHelp(app));
+    }
+    const targetName = args.shift()!;
+    const targetCommand = app.commands.find((entry) => entry.name === targetName);
+    if (!targetCommand) {
+      return writeResult(2, "", `Unknown command "${targetName}". Run ${app.name} --help for a list of commands.\n`);
+    }
+    if ("run" in targetCommand) {
+      return writeResult(0, formatCommandHelp(app.name, { ...targetCommand, globalOptions: globalDefinitions }, targetName));
+    }
+    return writeResult(0, formatGroupHelp(app.name, { ...targetCommand, globalOptions: globalDefinitions }, targetName));
+  }
+
   if (args[0]!.startsWith("-")) return writeResult(2, "", `Unknown option "${args[0]}". Run ${app.name} --help for usage.\n`);
 
   let commands: readonly CommandNode[] = app.commands;

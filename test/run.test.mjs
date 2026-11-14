@@ -378,3 +378,32 @@ test("checks required global options and rejects globals between group and leaf"
   assert.equal(misplaced.exitCode, 2);
   assert.match(misplaced.stderr, /global options must appear before/i);
 });
+
+test("supports root --version and -v flags", async () => {
+  const app = { name: "sample", version: "1.2.3", commands: [] };
+  const longVer = await runCli(app, ["--version"]);
+  assert.equal(longVer.stdout, "1.2.3\n");
+  assert.equal(longVer.exitCode, 0);
+
+  const shortVer = await runCli(app, ["-v"]);
+  assert.equal(shortVer.stdout, "1.2.3\n");
+  assert.equal(shortVer.exitCode, 0);
+});
+
+test("supports help subcommand for root and individual commands", async () => {
+  const greet = defineCommand({ name: "greet", description: "Say hello", run() {} });
+  const app = { name: "hello", version: "1.2.3", description: "A greeting app", commands: [greet] };
+
+  const rootHelp = await runCli(app, ["help"]);
+  assert.equal(rootHelp.exitCode, 0);
+  assert.match(rootHelp.stdout, /A greeting app/);
+
+  const commandHelp = await runCli(app, ["help", "greet"]);
+  assert.equal(commandHelp.exitCode, 0);
+  assert.match(commandHelp.stdout, /Usage: hello greet/);
+
+  const unknown = await runCli(app, ["help", "nonexistent"]);
+  assert.equal(unknown.exitCode, 2);
+  assert.match(unknown.stderr, /Unknown command "nonexistent"/);
+});
+

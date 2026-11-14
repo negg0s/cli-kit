@@ -89,7 +89,7 @@ export function formatRootHelp(app: CliDefinition): string {
   lines.push("", "Commands:");
   for (const command of app.commands) lines.push(`  ${command.name.padEnd(16)}${command.description}`);
   lines.push(...optionSection("Global options", app.globalOptions));
-  lines.push("", "Options:", "  -h, --help       Show this help", "  --json-help      Print help as versioned JSON", "  --version        Show version");
+  lines.push("", "Options:", "  -h, --help       Show this help", "  --json-help      Print help as versioned JSON", "  -v, --version    Show version");
   return `${lines.join("\n")}\n`;
 }
 
