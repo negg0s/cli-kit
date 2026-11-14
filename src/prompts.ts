@@ -42,7 +42,7 @@ export function createReadlinePromptIO(input: Readable, output: Writable): Promp
   let closed = false;
   const lines: string[] = [];
 
-  readline.on("line", (line) => {
+  readline.on("line", (line: string) => {
     if (!pending) {
       lines.push(line);
       readline.pause();
