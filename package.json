@@ -2,8 +2,27 @@
   "name": "@negg0s/cli-kit",
   "version": "0.1.0",
   "description": "A small TypeScript toolkit for building typed command-line apps.",
+  "author": "negg0s",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/negg0s/cli-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/negg0s/cli-kit/issues"
+  },
+  "homepage": "https://github.com/negg0s/cli-kit#readme",
+  "keywords": [
+    "cli",
+    "command-line",
+    "typescript",
+    "parser",
+    "subcommands",
+    "completions",
+    "prompts",
+    "terminal"
+  ],
   "engines": {
     "node": ">=22.6.0"
   },
