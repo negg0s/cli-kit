@@ -41,3 +41,99 @@ test("rejects names that could produce unsafe completion code", () => {
   assert.throws(() => completionScript({ name: "bad;touch", version: "1", commands: [] }, "bash"), /invalid CLI name/i);
   assert.throws(() => completionScript(buildApp(), "powershell"), /unsupported shell/i);
 });
+
+test("generates completions for nested command paths and leaf options", () => {
+  const app = {
+    name: "workbench",
+    version: "1.0.0",
+    commands: [{
+      name: "data",
+      description: "Data commands",
+      commands: [{ name: "import", description: "Import", options: { format: option.string() }, run() {} }],
+    }],
+  };
+  const bash = completionScript(app, "bash");
+  const zsh = completionScript(app, "zsh");
+  const fish = completionScript(app, "fish");
+  for (const script of [bash, zsh, fish]) {
+    assert.match(script, /data/);
+    assert.match(script, /import/);
+    assert.match(script, /format/);
+  }
+});
+
+test("uses ordered path checks for fish completions with overlapping command names", () => {
+  const app = {
+    name: "workbench",
+    version: "1.0.0",
+    commands: [
+      { name: "data", description: "Data", commands: [{ name: "import", description: "Import", options: { input: option.string() }, run() {} }] },
+      { name: "admin", description: "Admin", commands: [{ name: "data", description: "Nested data", options: { token: option.string() }, run() {} }] },
+    ],
+  };
+  const fish = completionScript(app, "fish");
+  assert.match(fish, /function __workbench_path_is/);
+  assert.match(fish, /__workbench_path_is prefix data import/);
+  assert.match(fish, /__workbench_path_is prefix admin data/);
+  assert.match(completionScript(app, "bash"), /--json-help/);
+});
+
+test("keeps bash and zsh completion context after leaf flags and their values", () => {
+  const app = {
+    name: "workbench",
+    version: "1.0.0",
+    commands: [{
+      name: "data",
+      description: "Data",
+      commands: [{ name: "import", description: "Import", options: { format: option.string() }, run() {} }],
+    }],
+  };
+  const bash = completionScript(app, "bash");
+  const zsh = completionScript(app, "zsh");
+  assert.match(bash, /case "\$command_path\|\$word" in/);
+  assert.match(bash, /'data\|import'\) command_path='data import'; break/);
+  assert.match(zsh, /while \(\( i < CURRENT \)\)/);
+  assert.match(zsh, /'data\|import'\) command_path='data import'; break/);
+});
+
+test("offers global flags at the root and in leaf command contexts", () => {
+  const command = { name: "show", description: "Show", options: { format: option.string() }, run() {} };
+  const app = {
+    name: "tool",
+    version: "1",
+    globalOptions: { verbose: option.boolean({ alias: "v" }) },
+    commands: [command],
+  };
+  const bash = completionScript(app, "bash");
+  assert.match(bash, /--format --verbose -v --no-verbose --help -h --json-help/);
+  assert.match(bash, /show --verbose -v --no-verbose --help -h --json-help --version/);
+  assert.match(bash, /--verbose\|-v\|--no-verbose/);
+  assert.match(completionScript(app, "zsh"), /--verbose\|-v\|--no-verbose/);
+  assert.match(completionScript(app, "fish"), /case '--verbose' '-v' '--no-verbose'/);
+});
+
+test("offers the short help flag in root, group, and leaf contexts for every shell", () => {
+  const app = {
+    name: "tool",
+    version: "1",
+    commands: [{
+      name: "data",
+      description: "Data",
+      commands: [{ name: "import", description: "Import", options: {}, run() {} }],
+    }],
+  };
+  const scripts = ["bash", "zsh", "fish"].map((shell) => completionScript(app, shell));
+
+  for (const script of scripts) {
+    assert.match(script, /-h/);
+  }
+  assert.match(scripts[0], /''\) words='data --help -h --json-help --version'/);
+  assert.match(scripts[0], /'data'\) words='import --help -h --json-help'/);
+  assert.match(scripts[0], /'data import'\) words='--help -h --json-help'/);
+  assert.match(scripts[1], /root_options=\([^\n]*'-h\[-h\]'/);
+  assert.match(scripts[1], /'data'\) command_options=\([^\n]*'-h\[-h\]'/);
+  assert.match(scripts[1], /'data import'\) command_options=\([^\n]*'-h\[-h\]'/);
+  assert.match(scripts[2], /complete -c tool -f -n '__tool_path_is exact' -s 'h'/);
+  assert.match(scripts[2], /complete -c tool -f -n '__tool_path_is exact data' -s 'h'/);
+  assert.match(scripts[2], /complete -c tool -f -n '__tool_path_is prefix data import' -s 'h'/);
+});

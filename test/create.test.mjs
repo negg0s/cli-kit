@@ -2,12 +2,13 @@
 import test from "node:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCliProject } from "../dist/index.js";
 
 async function withTemp(callback) {
-  const root = await mkdtemp(join(tmpdir(), "cli-kit-test-"));
+  const parent = join(process.cwd(), ".tmp");
+  await mkdir(parent, { recursive: true });
+  const root = await mkdtemp(join(parent, "cli-kit-test-"));
   try { await callback(root); } finally { await rm(root, { recursive: true, force: true }); }
 }
 
