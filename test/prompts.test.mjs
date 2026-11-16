@@ -103,3 +103,14 @@ test("readline adapter drains already emitted lines after close", async () => {
   assert.equal(await io.ask("Second?"), "two");
   assert.equal(await io.ask("Done?"), undefined);
 });
+
+test("readline adapter handles Ctrl+C / SIGINT cleanly by returning undefined", async () => {
+  const input = new PassThrough();
+  const io = createReadlinePromptIO(input, new PassThrough());
+  const pending = io.ask("Cancel me?");
+  // Send Ctrl+C byte
+  input.write("\u0003");
+  const result = await pending;
+  assert.equal(result, undefined);
+  io.close();
+});

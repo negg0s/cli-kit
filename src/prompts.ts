@@ -62,6 +62,22 @@ export function createReadlinePromptIO(input: Readable, output: Writable): Promp
     if (current.signal && current.onAbort) current.signal.removeEventListener("abort", current.onAbort);
     current.resolve(undefined);
   });
+  readline.on("SIGINT", () => {
+    if (!pending) return;
+    const current = pending;
+    pending = undefined;
+    if (current.signal && current.onAbort) current.signal.removeEventListener("abort", current.onAbort);
+    readline.pause();
+    current.resolve(undefined);
+  });
+
+  const onData = (chunk: Buffer | string) => {
+    const str = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    if (str.includes("\u0003")) {
+      readline.emit("SIGINT");
+    }
+  };
+  input.on("data", onData);
 
   return {
     ask(question, signal) {
@@ -88,6 +104,7 @@ export function createReadlinePromptIO(input: Readable, output: Writable): Promp
       });
     },
     close() {
+      input.removeListener("data", onData);
       readline.close();
     },
   };

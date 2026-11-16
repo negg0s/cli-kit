@@ -12,5 +12,5 @@ export { createCliProject } from "./create.js";
 export type { StarterOptions } from "./create.js";
 export { createPrompts, createReadlinePromptIO } from "./prompts.js";
 export type { PromptChoice, PromptIO } from "./prompts.js";
-export { formatTable } from "./table.js";
-export type { TableColumn } from "./table.js";
+export { formatTable, getTerminalWidth } from "./table.js";
+export type { TableColumn, TableOptions } from "./table.js";
