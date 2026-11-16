@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Pack distribution package
+        run: |
+          mkdir -p dist-pkg
+          npm pack --pack-destination dist-pkg
+
+      - name: Generate SHA-256 checksums
+        run: |
+          cd dist-pkg
+          sha256sum *.tgz > SHA256SUMS
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-pkg/*.tgz
+            dist-pkg/SHA256SUMS
+          generate_release_notes: true
